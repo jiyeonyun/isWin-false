@@ -1,11 +1,45 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Image } from "react-native";
 import { BarChart } from "react-native-chart-kit"; // BarChart import
 import { PieChart } from "react-native-chart-kit"; // PieChart import
+import eventData from "../../assets/events/event.json"; // assets에서 import한 JSON 데이터
+type EventsType = Record<string, { title: string; start: string }[]>;
 
 const Index = () => {
     const [index, setIndex] = useState(0);
+    const todayDate = new Date().toISOString().split("T")[0]; // 오늘 날짜 설정
+    const [events, setEvents] = useState<EventsType>({});
 
+    const formatDate = (dateStr: string): string => {
+        const [day, month, year] = dateStr.split(".");
+        return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    };
+
+    const formatTime = (datetimeStr: string): string => {
+        const [date, time] = datetimeStr.split(" ");
+        const formattedDate = formatDate(date);
+        return `${formattedDate} ${time}`;
+    };
+
+    const processEvents = () => {
+        const newEvents: EventsType = {};
+        eventData.forEach((event: any) => {
+            const { "Given planned earliest start": start, Title: title, "Additional Title": location } = event;
+            const date = formatDate(start.split(" ")[0]);
+            const eventSummary = { title, start: formatTime(start), location };
+
+            if (newEvents[date]) {
+                newEvents[date].push(eventSummary);
+            } else {
+                newEvents[date] = [eventSummary];
+            }
+        });
+        setEvents(newEvents);
+    };
+
+    useEffect(() => {
+        processEvents(); // 컴포넌트가 로드될 때 JSON 데이터 처리
+    }, []);
     // 승패 통계 데이터
     const winLossData = {
         labels: ["승", "패", "무", "취소"],
@@ -52,6 +86,19 @@ const Index = () => {
 
     return (
         <SafeAreaView style={styles.container}>
+            <View style={styles.todayEventContainer}>
+                <Text style={styles.title}>⚾️ 오늘의 경기</Text>
+                {events[todayDate] && events[todayDate].length > 0 ? (
+                    events[todayDate].map((event, idx) => (
+                        <View key={idx} style={styles.eventItem}>
+                            <Text style={styles.eventTitle}>{event.title}</Text>
+                            <Text style={styles.eventTime}>{event.start}</Text>
+                        </View>
+                    ))
+                ) : (
+                    <Text style={styles.noEventText}>오늘은 야없날 입니다 ㅜㅜ</Text>
+                )}
+            </View>
             <View style={styles.infoContainer}>
                 <Image
                     source={require("../../assets/images/profile.png")} // 프로필 이미지
@@ -64,6 +111,7 @@ const Index = () => {
                     <Text style={styles.rankText}>🥳 내 승률: {myWinRate}%</Text>
                     <Text style={styles.rankText}>🦁 내팀 승률: {teamWinRate}%</Text>
                 </View>
+                {/* 오늘의 이벤트 */}
             </View>
             <View style={styles.graphContainer}>
                 <View style={styles.tabContainer}>
@@ -225,6 +273,40 @@ const styles = StyleSheet.create({
         marginRight: 16, // 이미지와 텍스트 간격
         borderColor: "#666",
         borderWidth: 2,
+    },
+    todayEventContainer: {
+        marginTop: 20,
+        padding: 15,
+        backgroundColor: "#f8f9fa",
+        borderRadius: 10,
+        alignItems: "center",
+    },
+    eventItem: {
+        padding: 10,
+        backgroundColor: "#fff",
+        borderRadius: 8,
+        marginVertical: 5,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        width: "100%",
+        alignItems: "center",
+    },
+    eventTitle: {
+        fontSize: 16,
+        fontWeight: "bold",
+        color: "#333",
+    },
+    eventTime: {
+        fontSize: 14,
+        color: "#666",
+        marginTop: 5,
+    },
+    noEventText: {
+        fontSize: 16,
+        color: "#999",
+        fontStyle: "italic",
     },
 });
 
