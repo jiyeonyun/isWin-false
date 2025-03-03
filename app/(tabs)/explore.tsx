@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, Button, Alert, StyleSheet, SafeAreaView, ScrollView, Modal } from "react-native";
+import { View, Text, Button, Alert, StyleSheet, SafeAreaView, Modal, TouchableOpacity, FlatList } from "react-native";
 import { Calendar } from "react-native-calendars";
 import eventData from "../../assets/events/event.json"; // assets에서 import한 JSON 데이터
 import IsWinModal from "@/components/ui/IsWinModal"; // 일정 모달 컴포넌트
@@ -9,6 +9,7 @@ type EventsType = Record<string, { title: string; start: string }[]>;
 const CalendarScreen: React.FC = () => {
     const todayDate = new Date().toISOString().split("T")[0]; // 오늘 날짜 설정
     const [selectedDate, setSelectedDate] = useState<string>(todayDate); // 기본값을 오늘 날짜로 설정
+    const [currentDate, setCurrentDate] = useState<string>(todayDate); // 캘린더의 현재 날짜
     const [events, setEvents] = useState<EventsType>({}); // 날짜별 일정 저장
     const [modalVisible, setModalVisible] = useState<boolean>(false); // 모달 표시 여부
     const [diaryText, setDiaryText] = useState<string>(""); // 일기 텍스트 입력 상태
@@ -25,25 +26,24 @@ const CalendarScreen: React.FC = () => {
     };
 
     const processEvents = () => {
+        const newEvents: EventsType = {};
         eventData.forEach((event: any) => {
             const { "Given planned earliest start": start, Title: title, "Additional Title": location } = event;
             const date = formatDate(start.split(" ")[0]);
             const eventSummary = { title, start: formatTime(start), location };
 
-            setEvents((prevEvents) => {
-                const newEvents = { ...prevEvents };
-                if (newEvents[date]) {
-                    newEvents[date].push(eventSummary);
-                } else {
-                    newEvents[date] = [eventSummary];
-                }
-                return newEvents;
-            });
+            if (newEvents[date]) {
+                newEvents[date].push(eventSummary);
+            } else {
+                newEvents[date] = [eventSummary];
+            }
         });
+        setEvents(newEvents);
     };
 
     const handleDayPress = (day: any) => {
         setSelectedDate(day.dateString);
+        setCurrentDate(day.dateString); // 선택한 날짜로 캘린더 업데이트
         setModalVisible(true); // 날짜 선택 시 모달 열기
     };
 
@@ -51,23 +51,11 @@ const CalendarScreen: React.FC = () => {
         processEvents(); // 컴포넌트가 로드될 때 JSON 데이터 처리
     }, []);
 
-    const renderEvents = () => {
-        if (!events[selectedDate] || events[selectedDate].length === 0) {
-            return <Text>선택된 날짜에 일정이 없습니다.</Text>;
-        }
-        return events[selectedDate].map((event, index) => (
-            <View key={index} style={styles.eventContainer}>
-                <Text style={styles.eventTitle}>{event.title}</Text>
-                <Text style={styles.eventTime}>{event.start}</Text>
-            </View>
-        ));
-    };
-
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView>
+            <View style={styles.calendarContainer}>
                 <Calendar
-                    current={todayDate} // 오늘 날짜로 초기화
+                    current={currentDate} // 현재 날짜 상태 사용
                     onDayPress={handleDayPress}
                     markedDates={{
                         [selectedDate]: {
@@ -84,13 +72,26 @@ const CalendarScreen: React.FC = () => {
                     dayNames={["일", "월", "화", "수", "목", "금", "토"]}
                     monthFormat={"yyyy년 MM월"}
                 />
-                <View style={styles.eventsContainer}>
-                    <Text>선택된 날짜: {selectedDate}</Text>
-                    {renderEvents()}
-                </View>
-            </ScrollView>
-
-            {/* 모달을 활용하여 일기 작성 UI 표시 */}
+            </View>
+            <FlatList
+                data={Object.keys(events).sort()}
+                keyExtractor={(item) => item}
+                renderItem={({ item }) => (
+                    <TouchableOpacity
+                        style={styles.eventItem}
+                        onPress={() => {
+                            setSelectedDate(item);
+                            setCurrentDate(item); // 리스트 클릭 시 캘린더 이동
+                            setModalVisible(true); // 리스트 클릭 시 모달 열기
+                        }}
+                    >
+                        <Text style={styles.eventDate}>{item}</Text>
+                        <Text style={styles.eventTitle}>{events[item][0]?.title}</Text>
+                    </TouchableOpacity>
+                )}
+                style={styles.eventList}
+            />
+            {/* 일정 모달 */}
             <Modal
                 animationType="slide"
                 transparent={true}
@@ -125,30 +126,23 @@ const CalendarScreen: React.FC = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        padding: 20,
     },
-    eventsContainer: {
-        marginTop: 20,
+    calendarContainer: {
+        flex: 1,
     },
-    dateContainer: {
-        marginVertical: 10,
+    eventList: {
+        flex: 1,
     },
-    date: {
-        fontSize: 18,
-        fontWeight: "bold",
+    eventItem: {
+        padding: 15,
+        borderBottomWidth: 1,
+        borderBottomColor: "#ccc",
     },
-    eventSummary: {
-        fontSize: 14,
-        color: "gray",
-    },
-    eventContainer: {
-        marginVertical: 5,
-    },
-    eventTitle: {
+    eventDate: {
         fontSize: 16,
         fontWeight: "bold",
     },
-    eventTime: {
+    eventTitle: {
         fontSize: 14,
         color: "gray",
     },

@@ -143,14 +143,14 @@ const Index = () => {
                             <Text style={styles.title}>홈/어웨이 승률</Text>
                             <PieChart
                                 data={homeAwayWinRateData}
-                                width={300}
+                                width={280}
                                 height={220}
                                 chartConfig={{
                                     color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`, // 그래프 색을 검정으로 설정
                                 }}
                                 accessor="population"
                                 backgroundColor="transparent"
-                                style={[styles.chartStyle, { paddingLeft: 20 }]}
+                                style={[styles.chartStyle]}
                             />
                         </View>
                     )}
