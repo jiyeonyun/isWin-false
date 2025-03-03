@@ -1,109 +1,157 @@
-import { StyleSheet, Image, Platform } from 'react-native';
+import React, { useState, useEffect } from "react";
+import { View, Text, Button, Alert, StyleSheet, SafeAreaView, ScrollView, Modal } from "react-native";
+import { Calendar } from "react-native-calendars";
+import eventData from "../../assets/events/event.json"; // assets에서 import한 JSON 데이터
+import IsWinModal from "@/components/ui/IsWinModal"; // 일정 모달 컴포넌트
 
-import { Collapsible } from '@/components/Collapsible';
-import { ExternalLink } from '@/components/ExternalLink';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+type EventsType = Record<string, { title: string; start: string }[]>;
 
-export default function TabTwoScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Explore</ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image source={require('@/assets/images/react-logo.png')} style={{ alignSelf: 'center' }} />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Custom fonts">
-        <ThemedText>
-          Open <ThemedText type="defaultSemiBold">app/_layout.tsx</ThemedText> to see how to load{' '}
-          <ThemedText style={{ fontFamily: 'SpaceMono' }}>
-            custom fonts such as this one.
-          </ThemedText>
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/versions/latest/sdk/font">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user's current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful <ThemedText type="defaultSemiBold">react-native-reanimated</ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
-  );
-}
+const CalendarScreen: React.FC = () => {
+    const todayDate = new Date().toISOString().split("T")[0]; // 오늘 날짜 설정
+    const [selectedDate, setSelectedDate] = useState<string>(todayDate); // 기본값을 오늘 날짜로 설정
+    const [events, setEvents] = useState<EventsType>({}); // 날짜별 일정 저장
+    const [modalVisible, setModalVisible] = useState<boolean>(false); // 모달 표시 여부
+    const [diaryText, setDiaryText] = useState<string>(""); // 일기 텍스트 입력 상태
+
+    const formatDate = (dateStr: string): string => {
+        const [day, month, year] = dateStr.split(".");
+        return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    };
+
+    const formatTime = (datetimeStr: string): string => {
+        const [date, time] = datetimeStr.split(" ");
+        const formattedDate = formatDate(date);
+        return `${formattedDate} ${time}`;
+    };
+
+    const processEvents = () => {
+        eventData.forEach((event: any) => {
+            const { "Given planned earliest start": start, Title: title, "Additional Title": location } = event;
+            const date = formatDate(start.split(" ")[0]);
+            const eventSummary = { title, start: formatTime(start), location };
+
+            setEvents((prevEvents) => {
+                const newEvents = { ...prevEvents };
+                if (newEvents[date]) {
+                    newEvents[date].push(eventSummary);
+                } else {
+                    newEvents[date] = [eventSummary];
+                }
+                return newEvents;
+            });
+        });
+    };
+
+    const handleDayPress = (day: any) => {
+        setSelectedDate(day.dateString);
+        setModalVisible(true); // 날짜 선택 시 모달 열기
+    };
+
+    useEffect(() => {
+        processEvents(); // 컴포넌트가 로드될 때 JSON 데이터 처리
+    }, []);
+
+    const renderEvents = () => {
+        if (!events[selectedDate] || events[selectedDate].length === 0) {
+            return <Text>선택된 날짜에 일정이 없습니다.</Text>;
+        }
+        return events[selectedDate].map((event, index) => (
+            <View key={index} style={styles.eventContainer}>
+                <Text style={styles.eventTitle}>{event.title}</Text>
+                <Text style={styles.eventTime}>{event.start}</Text>
+            </View>
+        ));
+    };
+
+    return (
+        <SafeAreaView style={styles.container}>
+            <ScrollView>
+                <Calendar
+                    current={todayDate} // 오늘 날짜로 초기화
+                    onDayPress={handleDayPress}
+                    markedDates={{
+                        [selectedDate]: {
+                            selected: true,
+                            selectedColor: "blue",
+                            selectedTextColor: "white",
+                        },
+                    }}
+                    theme={{
+                        selectedDayBackgroundColor: "blue",
+                        selectedDayTextColor: "white",
+                        todayTextColor: "green",
+                    }}
+                    dayNames={["일", "월", "화", "수", "목", "금", "토"]}
+                    monthFormat={"yyyy년 MM월"}
+                />
+                <View style={styles.eventsContainer}>
+                    <Text>선택된 날짜: {selectedDate}</Text>
+                    {renderEvents()}
+                </View>
+            </ScrollView>
+
+            {/* 모달을 활용하여 일기 작성 UI 표시 */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={modalVisible}
+                onRequestClose={() => setModalVisible(false)}
+            >
+                <IsWinModal
+                    saveDiary={() => {}}
+                    selectedDate={selectedDate}
+                    setModalVisible={setModalVisible}
+                    diaryText={diaryText}
+                    setDiaryText={setDiaryText}
+                    title=""
+                    setTitle={() => {}}
+                    score=""
+                    setScore={() => {}}
+                    location=""
+                    setLocation={() => {}}
+                    mvp=""
+                    setMvp={() => {}}
+                    suspect=""
+                    setSuspect={() => {}}
+                    yafu=""
+                    setYafu={() => {}}
+                    events={events}
+                />
+            </Modal>
+        </SafeAreaView>
+    );
+};
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
+    container: {
+        flex: 1,
+        padding: 20,
+    },
+    eventsContainer: {
+        marginTop: 20,
+    },
+    dateContainer: {
+        marginVertical: 10,
+    },
+    date: {
+        fontSize: 18,
+        fontWeight: "bold",
+    },
+    eventSummary: {
+        fontSize: 14,
+        color: "gray",
+    },
+    eventContainer: {
+        marginVertical: 5,
+    },
+    eventTitle: {
+        fontSize: 16,
+        fontWeight: "bold",
+    },
+    eventTime: {
+        fontSize: 14,
+        color: "gray",
+    },
 });
+
+export default CalendarScreen;
