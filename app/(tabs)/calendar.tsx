@@ -1,8 +1,6 @@
-import { ThemedText } from "@/components/ThemedText";
-import { ThemedView } from "@/components/ThemedView";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { FlatList, Modal, Pressable, StyleSheet, View } from "react-native";
+import { FlatList, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { Calendar, DateData, LocaleConfig } from "react-native-calendars";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -84,9 +82,9 @@ export default function CalendarScreen() {
             }}
             style={styles.eventItem}
         >
-            <ThemedText type="defaultSemiBold">{item.Title}</ThemedText>
-            <ThemedText>장소: {item["Additional Title"]}</ThemedText>
-            <ThemedText>시작: {formatDate(item["Given planned earliest start"])}</ThemedText>
+            <Text style={styles.eventTitle}>{item.Title}</Text>
+            <Text style={styles.eventPlace}>장소: {item["Additional Title"]}</Text>
+            <Text style={styles.eventTime}>시작: {formatDate(item["Given planned earliest start"])}</Text>
         </Pressable>
     );
     const movetoDiary = () => {
@@ -98,9 +96,9 @@ export default function CalendarScreen() {
     };
     return (
         <SafeAreaView style={styles.container}>
-            <ThemedView style={styles.header}>
-                <ThemedText type="subtitle">경기 일정 🦁</ThemedText>
-            </ThemedView>
+            <View style={styles.header}>
+                <Text style={styles.headerText}>경기 일정 🦁</Text>
+            </View>
             <View style={styles.calendarContainer}>
                 <Calendar
                     onDayPress={(day: DateData) => setSelectedDate(day.dateString)}
@@ -135,20 +133,22 @@ export default function CalendarScreen() {
                     <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
                         {selectedEvent && (
                             <View>
-                                <ThemedText type="title" style={styles.modalTitle}>
-                                    {selectedEvent.Title}
-                                </ThemedText>
+                                <Text style={styles.modalTitle}>{selectedEvent.Title}</Text>
                                 <View style={styles.modalInfo}>
-                                    <ThemedText type="defaultSemiBold">경기장</ThemedText>
-                                    <ThemedText>{selectedEvent["Additional Title"]}</ThemedText>
+                                    <Text style={styles.modalInfoTitle}>경기장</Text>
+                                    <Text style={styles.modalInfoText}>{selectedEvent["Additional Title"]}</Text>
                                 </View>
                                 <View style={styles.modalInfo}>
-                                    <ThemedText type="defaultSemiBold">시작 시간</ThemedText>
-                                    <ThemedText>{formatDate(selectedEvent["Given planned earliest start"])}</ThemedText>
+                                    <Text style={styles.modalInfoTitle}>시작 시간</Text>
+                                    <Text style={styles.modalInfoText}>
+                                        {formatDate(selectedEvent["Given planned earliest start"])}
+                                    </Text>
                                 </View>
                                 <View style={styles.modalInfo}>
-                                    <ThemedText type="defaultSemiBold">종료 시간</ThemedText>
-                                    <ThemedText>{formatDate(selectedEvent["Given planned earliest end"])}</ThemedText>
+                                    <Text style={styles.modalInfoTitle}>종료 시간</Text>
+                                    <Text style={styles.modalInfoText}>
+                                        {formatDate(selectedEvent["Given planned earliest end"])}
+                                    </Text>
                                 </View>
                                 <View
                                     style={{
@@ -159,10 +159,10 @@ export default function CalendarScreen() {
                                     }}
                                 >
                                     <Pressable style={styles.modalButton} onPress={movetoDiary}>
-                                        <ThemedText style={styles.closeButtonText}>기록 하기</ThemedText>
+                                        <Text style={styles.closeButtonText}>기록 하기</Text>
                                     </Pressable>
                                     <Pressable style={styles.closeButton} onPress={() => setModalVisible(false)}>
-                                        <ThemedText style={styles.closeButtonText}>닫기</ThemedText>
+                                        <Text style={styles.closeButtonText}>닫기</Text>
                                     </Pressable>
                                 </View>
                             </View>
@@ -185,7 +185,9 @@ const styles = StyleSheet.create({
     },
     calendarContainer: {
         padding: 16,
-        backgroundColor: "#fff",
+        borderRadius: 16,
+        margin: 16,
+        backgroundColor: "white",
     },
     list: {
         padding: 16,
@@ -248,5 +250,26 @@ const styles = StyleSheet.create({
         color: "white",
         textAlign: "center",
         fontWeight: "bold",
+    },
+    headerText: {
+        fontSize: 18,
+        fontWeight: "bold",
+    },
+    eventTitle: {
+        fontSize: 16,
+        fontWeight: "bold",
+    },
+    eventPlace: {
+        fontSize: 14,
+    },
+    eventTime: {
+        fontSize: 14,
+    },
+    modalInfoTitle: {
+        fontSize: 16,
+        fontWeight: "bold",
+    },
+    modalInfoText: {
+        fontSize: 14,
     },
 });
