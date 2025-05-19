@@ -122,6 +122,7 @@ const SettingModal = ({
                             <Text style={styles.modalInfoItemTitle}>소개</Text>
                             <TextInput style={styles.modalInput} value={intro} onChangeText={setIntro} />
                         </View>
+
                         <View style={styles.modalInfoItem}>
                             <Pressable
                                 onPress={() => {
@@ -130,11 +131,10 @@ const SettingModal = ({
                                     setIntro("");
                                     setProfileImage(null);
                                     setIsSetting(false);
-                                    router.replace("/");
-                                    setIsSetting(false);
+                                    router.replace("/(auth)");
                                 }}
                             >
-                                <Text>로그아웃</Text>
+                                <Text>로그아웃hh</Text>
                             </Pressable>
                         </View>
                     </View>

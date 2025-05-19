@@ -30,22 +30,8 @@ export default function TabLayout() {
             <Tabs.Screen
                 name="index"
                 options={{
-                    title: "홈",
+                    title: "로그인",
                     tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-                }}
-            />
-            <Tabs.Screen
-                name="calendar"
-                options={{
-                    title: "경기 일정",
-                    tabBarIcon: ({ color }) => <IconSymbol size={28} name="calendar" color={color} />,
-                }}
-            />
-            <Tabs.Screen
-                name="diary"
-                options={{
-                    title: "기록",
-                    tabBarIcon: ({ color }) => <IconSymbol size={28} name="pencil" color={color} />,
                 }}
             />
         </Tabs>

@@ -1,26 +1,60 @@
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
+import { auth } from "@/firebaseConfig";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import React, { useEffect, useState } from "react";
-import { Pressable, SafeAreaView, StyleSheet, Text, TextInput } from "react-native";
+import { Alert, Pressable, SafeAreaView, StyleSheet, Text, TextInput } from "react-native";
 
-export default function AuthScreen() {
+const index = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [name, setName] = useState("");
 
+    const createUser = () => {
+        if (email == "" || password == "") {
+            Alert.alert("오류", "이메일과 비밀번호를 입력해주세요.");
+            return;
+        }
+        createUserWithEmailAndPassword(auth, email, password)
+            .then((userCredential) => {
+                setIsLogin(true);
+            })
+            .catch((error) => {
+                const errorCode = error.code;
+                const errorMessage = error.message;
+                Alert.alert("오류", errorMessage);
+            });
+    };
+
     const handleAuth = () => {
-        // TODO: 실제 인증 로직 구현
-        router.replace("/(tabs)/main");
+        if (email == "" || password == "") {
+            Alert.alert("오류", "이메일과 비밀번호를 입력해주세요.");
+            return;
+        }
+        signInWithEmailAndPassword(auth, email, password)
+            .then((userCredential) => {
+                // Signed in
+                AsyncStorage.setItem("name", name);
+                AsyncStorage.setItem("email", email);
+                AsyncStorage.setItem("password", password);
+                const user = userCredential.user;
+                router.replace("/(tabs)");
+            })
+            .catch((error) => {
+                const errorCode = error.code;
+                const errorMessage = error.message;
+                Alert.alert("오류", errorMessage);
+            });
     };
 
     useEffect(() => {
         const checkAuth = async () => {
             const name = await AsyncStorage.getItem("name");
             if (name) {
-                router.replace("/(tabs)/main");
+                router.replace("/(tabs)");
             }
         };
         checkAuth();
@@ -62,7 +96,7 @@ export default function AuthScreen() {
                     placeholderTextColor="#666"
                 />
 
-                <Pressable style={styles.button} onPress={handleAuth}>
+                <Pressable style={styles.button} onPress={isLogin ? handleAuth : createUser}>
                     <Text style={styles.buttonText}>{isLogin ? "로그인" : "회원가입"}</Text>
                 </Pressable>
 
@@ -74,7 +108,9 @@ export default function AuthScreen() {
             </ThemedView>
         </SafeAreaView>
     );
-}
+};
+
+export default index;
 
 const styles = StyleSheet.create({
     container: {
