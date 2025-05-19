@@ -1,6 +1,7 @@
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
+import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Alert, Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -121,7 +122,23 @@ const SettingModal = ({
                             <Text style={styles.modalInfoItemTitle}>소개</Text>
                             <TextInput style={styles.modalInput} value={intro} onChangeText={setIntro} />
                         </View>
+                        <View style={styles.modalInfoItem}>
+                            <Pressable
+                                onPress={() => {
+                                    AsyncStorage.clear();
+                                    setName("");
+                                    setIntro("");
+                                    setProfileImage(null);
+                                    setIsSetting(false);
+                                    router.replace("/");
+                                    setIsSetting(false);
+                                }}
+                            >
+                                <Text>로그아웃</Text>
+                            </Pressable>
+                        </View>
                     </View>
+
                     <View style={styles.modalFooter}>
                         <Pressable style={[styles.modalButton, { backgroundColor: "white" }]} onPress={resetStorage}>
                             <Text style={[styles.modalButtonText, { color: "#0059c5" }]}>초기화</Text>

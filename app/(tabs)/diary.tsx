@@ -1,4 +1,3 @@
-import { ThemedView } from "@/components/ThemedView";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
@@ -69,7 +68,7 @@ const DiaryScreen = () => {
 
     return (
         <SafeAreaView style={styles.container}>
-            <ThemedView style={styles.header}>
+            <View style={styles.header}>
                 <Text>
                     오늘의 직관은... <Text>{match}</Text>
                     {!match && (
@@ -83,7 +82,7 @@ const DiaryScreen = () => {
                         <IconSymbol name="xmark" size={24} color="#636363" />
                     </Pressable>
                 )}
-            </ThemedView>
+            </View>
             {renderInputFiled}
         </SafeAreaView>
     );
@@ -92,7 +91,6 @@ const DiaryScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#ffffff",
     },
     header: {
         padding: 16,
