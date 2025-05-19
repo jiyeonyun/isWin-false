@@ -1,7 +1,9 @@
 import { IconSymbol } from "@/components/ui/IconSymbol";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { firestore } from "@/firebaseConfig";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
+import { getAuth, signOut, updateProfile } from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import { Alert, Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -12,28 +14,77 @@ const SettingModal = ({
     isSetting: boolean;
     setIsSetting: (isSetting: boolean) => void;
 }) => {
-    const [name, setName] = useState("");
-    const [intro, setIntro] = useState("");
+    const auth = getAuth();
+    const user = auth.currentUser;
+    const [name, setName] = useState<string>("");
+    const [intro, setIntro] = useState<string>("");
     const [profileImage, setProfileImage] = useState<string | null>(null);
+
+    useEffect(() => {
+        console.log("useEffect 실행됨");
+
+        const loadUserData = async () => {
+            console.log("loadUserData 함수 시작");
+
+            if (!user?.uid) {
+                console.log("user.uid가 없습니다");
+                return;
+            }
+            console.log("현재 user 객체:", user);
+            console.log("user.uid:", user.uid);
+
+            try {
+                const docRef = doc(firestore, "users", user.uid);
+                console.log("docRef 생성됨");
+
+                const docSnap = await getDoc(docRef);
+                console.log("docSnap 가져옴");
+
+                if (docSnap.exists()) {
+                    console.log("문서가 존재합니다");
+                    const docData = docSnap.data();
+                    console.log("Firestore 데이터:", docData);
+
+                    setName(docData?.nickName || docData?.name || user.displayName || "");
+                    setIntro(docData?.intro || "");
+                    setProfileImage(docData?.profileImage || user.photoURL || null);
+                } else {
+                    console.log("문서가 존재하지 않습니다");
+                    setName(user.displayName || "");
+                    setProfileImage(user.photoURL || null);
+                }
+            } catch (error) {
+                console.error("Firestore 데이터 가져오기 실패:", error);
+                // 에러 발생 시에도 기본값 설정
+                setName(user.displayName || "");
+                setProfileImage(user.photoURL || null);
+            }
+        };
+
+        loadUserData();
+    }, []);
 
     const pickImage = async () => {
         if (profileImage) {
-            Alert.alert("이미 설정되어 있습니다.", "이미 설정되어 있는 이미지를 삭제하시겠습니까?", [
-                { text: "취소", onPress: () => {} },
+            Alert.alert("이미 설정됨", "삭제하시겠습니까?", [
+                { text: "취소" },
                 {
                     text: "삭제",
-                    onPress: () => {
+                    onPress: async () => {
                         setProfileImage(null);
-                        AsyncStorage.removeItem("profileImage");
+                        if (user) {
+                            await updateProfile(user, { photoURL: null });
+                            await setDoc(doc(firestore, "users", user.uid), { profileImage: null }, { merge: true });
+                        }
                     },
                 },
             ]);
             return;
         }
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== "granted") {
-            Alert.alert("권한 필요", "이미지를 선택하기 위해 갤러리 접근 권한이 필요합니다.");
+            Alert.alert("권한 필요", "이미지를 선택하려면 권한이 필요합니다.");
             return;
         }
 
@@ -41,48 +92,40 @@ const SettingModal = ({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             allowsEditing: true,
             aspect: [1, 1],
-            quality: 0.5,
+            quality: 0.4,
+            base64: true,
         });
 
-        if (!result.canceled) {
-            setProfileImage(result.assets[0].uri);
-            AsyncStorage.setItem("profileImage", result.assets[0].uri);
+        if (!result.canceled && user) {
+            try {
+                const base64Image = result.assets[0].base64;
+                const dataUrl = `data:image/jpeg;base64,${base64Image}`;
+
+                await setDoc(doc(firestore, "users", user.uid), { profileImage: dataUrl }, { merge: true });
+
+                await updateProfile(user, { photoURL: dataUrl });
+                setProfileImage(dataUrl);
+            } catch (error) {
+                console.error("이미지 저장 오류:", error);
+                Alert.alert("오류", "이미지 저장 중 문제가 발생했습니다.");
+            }
         }
     };
 
-    const resetStorage = () => {
-        Alert.alert("초기화", "정말 초기화 하시겠습니까?", [
-            { text: "취소", onPress: () => {} },
-            {
-                text: "초기화",
-                onPress: () => {
-                    AsyncStorage.clear();
-                    setName("");
-                    setIntro("");
-                    setProfileImage(null);
-                    setIsSetting(false);
-                },
-            },
-        ]);
-    };
+    const saveStorage = async () => {
+        if (!user) return;
 
-    const saveStorage = () => {
-        AsyncStorage.setItem("name", name);
-        AsyncStorage.setItem("intro", intro);
-        setIsSetting(false);
-    };
+        try {
+            await updateProfile(user, { displayName: name });
 
-    useEffect(() => {
-        AsyncStorage.getItem("name").then((value) => {
-            setName(value || "");
-        });
-        AsyncStorage.getItem("intro").then((value) => {
-            setIntro(value || "");
-        });
-        AsyncStorage.getItem("profileImage").then((value) => {
-            setProfileImage(value);
-        });
-    }, []);
+            await setDoc(doc(firestore, "users", user.uid), { name, intro }, { merge: true });
+
+            setIsSetting(false);
+        } catch (error) {
+            console.error("사용자 저장 오류:", error);
+            Alert.alert("오류", "저장 중 문제가 발생했습니다.");
+        }
+    };
 
     return (
         <Modal animationType="fade" transparent={true} visible={isSetting} onRequestClose={() => setIsSetting(false)}>
@@ -91,9 +134,10 @@ const SettingModal = ({
                     <View style={styles.modalHeader}>
                         <Text style={styles.modalTitle}>설정</Text>
                         <Pressable style={styles.closeButton} onPress={() => setIsSetting(false)}>
-                            <IconSymbol size={22} name={"xmark"} color="gray" />
+                            <IconSymbol size={22} name="xmark" color="gray" />
                         </Pressable>
                     </View>
+
                     <View style={styles.modalInfo}>
                         <View
                             style={{
@@ -118,6 +162,7 @@ const SettingModal = ({
                             <Text style={styles.modalInfoItemTitle}>이름</Text>
                             <TextInput style={styles.modalInput} value={name} onChangeText={setName} />
                         </View>
+
                         <View style={styles.modalInfoItem}>
                             <Text style={styles.modalInfoItemTitle}>소개</Text>
                             <TextInput style={styles.modalInput} value={intro} onChangeText={setIntro} />
@@ -126,7 +171,7 @@ const SettingModal = ({
                         <View style={styles.modalInfoItem}>
                             <Pressable
                                 onPress={() => {
-                                    AsyncStorage.clear();
+                                    signOut(auth);
                                     setName("");
                                     setIntro("");
                                     setProfileImage(null);
@@ -134,17 +179,14 @@ const SettingModal = ({
                                     router.replace("/(auth)");
                                 }}
                             >
-                                <Text>로그아웃hh</Text>
+                                <Text>로그아웃</Text>
                             </Pressable>
                         </View>
                     </View>
 
                     <View style={styles.modalFooter}>
-                        <Pressable style={[styles.modalButton, { backgroundColor: "white" }]} onPress={resetStorage}>
-                            <Text style={[styles.modalButtonText, { color: "#0059c5" }]}>초기화</Text>
-                        </Pressable>
-                        <Pressable style={styles.modalButton} onPress={saveStorage}>
-                            <Text style={styles.modalButtonText}>저장</Text>
+                        <Pressable style={[styles.modalButton, { backgroundColor: "white" }]} onPress={saveStorage}>
+                            <Text style={[styles.modalButtonText, { color: "#0059c5" }]}>저장</Text>
                         </Pressable>
                     </View>
                 </View>

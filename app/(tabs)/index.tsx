@@ -1,6 +1,7 @@
 import SettingModal from "@/components/modal/SettingModal";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getAuth } from "firebase/auth";
 import { useEffect, useState } from "react";
 import { Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -15,6 +16,9 @@ export default function HomeScreen() {
     const [winRate, setWinRate] = useState(0);
     const [sequnceResultNumber, setSequnceResultNumber] = useState(0);
     const [sequnceResult, setSequnceResult] = useState("win");
+
+    const auth = getAuth();
+    const user = auth.currentUser;
 
     useEffect(() => {
         AsyncStorage.getItem("name").then((value) => {
