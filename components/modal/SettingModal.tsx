@@ -1,11 +1,16 @@
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { firestore } from "@/firebaseConfig";
+import Constants from "expo-constants";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { getAuth, signOut, updateProfile } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import { Alert, Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+
+const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } = Constants.expoConfig?.extra ?? {};
+console.log("CLOUDINARY_CLOUD_NAME", CLOUDINARY_CLOUD_NAME);
+console.log("CLOUDINARY_UPLOAD_PRESET", CLOUDINARY_UPLOAD_PRESET);
 
 const SettingModal = ({
     isSetting,
@@ -88,27 +93,49 @@ const SettingModal = ({
             return;
         }
 
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.4,
-            base64: true,
-        });
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.4,
+                base64: true,
+            });
 
-        if (!result.canceled && user) {
-            try {
+            if (!result.canceled && user) {
+                // 로딩 상태 표시
+                Alert.alert("업로드 중", "이미지를 업로드하고 있습니다...");
+
                 const base64Image = result.assets[0].base64;
-                const dataUrl = `data:image/jpeg;base64,${base64Image}`;
 
-                await setDoc(doc(firestore, "users", user.uid), { profileImage: dataUrl }, { merge: true });
+                // Cloudinary 업로드
+                const formData = new FormData();
+                formData.append("file", `data:image/jpeg;base64,${base64Image}`);
+                formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET || "");
 
-                await updateProfile(user, { photoURL: dataUrl });
-                setProfileImage(dataUrl);
-            } catch (error) {
-                console.error("이미지 저장 오류:", error);
-                Alert.alert("오류", "이미지 저장 중 문제가 발생했습니다.");
+                const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+                    method: "POST",
+                    body: formData,
+                });
+
+                const data = await response.json();
+                console.log("data", data);
+                if (data.secure_url) {
+                    // Firebase Auth 프로필 업데이트
+                    await updateProfile(user, { photoURL: data.secure_url });
+
+                    // Firestore 업데이트
+                    await setDoc(doc(firestore, "users", user.uid), { profileImage: data.secure_url }, { merge: true });
+
+                    setProfileImage(data.secure_url);
+                    Alert.alert("성공", "프로필 이미지가 업데이트되었습니다.");
+                } else {
+                    throw new Error("이미지 업로드 실패");
+                }
             }
+        } catch (error) {
+            console.error("이미지 업로드 오류:", error);
+            Alert.alert("오류", "이미지 업로드 중 문제가 발생했습니다.");
         }
     };
 
