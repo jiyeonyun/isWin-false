@@ -1,7 +1,8 @@
 import SettingModal from "@/components/modal/SettingModal";
 import { IconSymbol } from "@/components/ui/IconSymbol";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { firestore } from "@/firebaseConfig";
 import { getAuth } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -21,15 +22,35 @@ export default function HomeScreen() {
     const user = auth.currentUser;
 
     useEffect(() => {
-        AsyncStorage.getItem("name").then((value) => {
-            setName(value || "");
-        });
-        AsyncStorage.getItem("intro").then((value) => {
-            setIntro(value || "");
-        });
-        AsyncStorage.getItem("profileImage").then((value) => {
-            setProfileImage(value);
-        });
+        const loadUserData = async () => {
+            if (!user?.uid) {
+                return;
+            }
+
+            try {
+                const docRef = doc(firestore, "users", user.uid);
+
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    const docData = docSnap.data();
+
+                    setName(docData?.name || "");
+                    setIntro(docData?.intro || "");
+                    setProfileImage(docData?.profileImage || null);
+                } else {
+                    setName("");
+                    setProfileImage(null);
+                }
+            } catch (error) {
+                console.error("Firestore 데이터 가져오기 실패:", error);
+                // 에러 발생 시에도 기본값 설정
+                setName("");
+                setProfileImage(null);
+            }
+        };
+
+        loadUserData();
     }, [isSetting]);
 
     const renderInfo = () => {

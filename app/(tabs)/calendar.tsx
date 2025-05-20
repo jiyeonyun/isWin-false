@@ -88,11 +88,19 @@ export default function CalendarScreen() {
         </Pressable>
     );
     const movetoDiary = () => {
-        router.push({
-            pathname: "/diary",
-            params: { event: JSON.stringify(selectedEvent) },
-        });
-        setModalVisible(false);
+        if (selectedEvent) {
+            const diaryData = {
+                title: selectedEvent.Title,
+                desc: selectedEvent.Notes,
+                date: formatDate(selectedEvent["Given planned earliest start"]),
+                place: selectedEvent["Additional Title"],
+            };
+            router.push({
+                pathname: "/diary",
+                params: { event: JSON.stringify(diaryData) },
+            });
+            setModalVisible(false);
+        }
     };
     return (
         <SafeAreaView style={styles.container}>
