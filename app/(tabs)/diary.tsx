@@ -698,6 +698,7 @@ const DiaryScreen = () => {
                                     </View>
                                 </View>
                             )}
+                            {renderOptionalField("image", "사진", "image", "오늘의 사진을 입력하세요")}
                             {renderOptionalField("mood", "기분", "mood", "오늘의 기분을 입력하세요")}
                             {renderOptionalField("cost", "지출", "cost", "오늘의 지출을 입력하세요")}
                             {renderOptionalField("weather", "날씨", "weather", "오늘의 날씨를 입력하세요")}
