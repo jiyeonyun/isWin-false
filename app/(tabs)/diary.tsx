@@ -1,35 +1,47 @@
 import { IconSymbol } from "@/components/ui/IconSymbol";
+import Constants from "expo-constants";
+import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { getAuth } from "firebase/auth";
+import { collection, deleteDoc, doc, getDocs, getFirestore, setDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+
 interface DiaryData {
     title: string;
     desc: string;
     date: string;
     place: string;
-
-    mood: string;
-    weather: string;
-    inning: string;
+    mood?: string;
+    weather?: string;
     team1: string;
-    food: string;
+    food?: string;
     team2: string;
     inningScores: Record<string, string>;
-    best: string;
-    worst: string;
+    best?: string;
+    worst?: string;
     isWin: string;
+    team1Lineup: string[];
+    team2Lineup: string[];
+    cost: number;
+    image: any;
 }
 
 const DiaryScreen = () => {
     const { event } = useLocalSearchParams();
+    const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } = Constants.expoConfig?.extra ?? {};
+    const auth = getAuth();
+    const user = auth.currentUser;
     const router = useRouter();
     const [isExtraInning, setIsExtraInning] = useState(false);
     const [innigs, setInnings] = useState<any[]>([1, 2, 3, 4, 5, 6, 7, 8, 9, "R", "H", "E", "B"]);
     const [isCancel, setIsCancel] = useState(false);
-    const [diaryContent, setDiaryContent] = useState<string[]>([]);
+    const [diaryContent, setDiaryContent] = useState<DiaryData[]>([]);
     const [isDiary, setIsDiary] = useState<boolean>(false);
     const [parsed, setParsed] = useState<DiaryData>();
     const [isWin, setIsWin] = useState<string>("무");
+    const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [image, setImage] = useState<string | null>(null);
     const [diaryForm, setDiaryForm] = useState<DiaryData>({
         title: "",
         desc: "",
@@ -37,7 +49,6 @@ const DiaryScreen = () => {
         place: "",
         mood: "",
         weather: "",
-        inning: "",
         food: "",
         team1: "",
         team2: "",
@@ -45,7 +56,144 @@ const DiaryScreen = () => {
         best: "",
         worst: "",
         isWin: "무",
+        team1Lineup: ["", "", "", "", "", "", "", "", "", ""],
+        team2Lineup: ["", "", "", "", "", "", "", "", "", ""],
+        cost: 0,
+        image: "",
     });
+
+    const [optionalFields, setOptionalFields] = useState({
+        lineup: true,
+        mood: false,
+        weather: false,
+        food: false,
+        best: false,
+        worst: false,
+        cost: false,
+        image: false,
+    });
+
+    const toggleField = (field: keyof typeof optionalFields) => {
+        setOptionalFields((prev) => ({
+            ...prev,
+            [field]: !prev[field],
+        }));
+    };
+
+    const pickImage = async () => {
+        if (diaryForm.image) {
+            Alert.alert("사진 설정됨", "사진을 삭제하시겠습니까?", [
+                { text: "취소" },
+                {
+                    text: "삭제",
+                    onPress: () => {
+                        setDiaryForm((prev) => ({ ...prev, image: "" }));
+                    },
+                },
+            ]);
+            return;
+        }
+
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") {
+            Alert.alert("권한 필요", "이미지를 선택하려면 권한이 필요합니다.");
+            return;
+        }
+
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.4,
+                base64: true,
+            });
+
+            if (!result.canceled) {
+                setIsLoading(true);
+
+                const base64Image = result.assets[0].base64;
+
+                const formData = new FormData();
+                formData.append("file", `data:image/jpeg;base64,${base64Image}`);
+                formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET || "");
+
+                const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+                    method: "POST",
+                    body: formData,
+                });
+
+                const data = await response.json();
+
+                if (data.secure_url) {
+                    setDiaryForm((prev) => ({ ...prev, image: data.secure_url }));
+                } else {
+                    throw new Error("이미지 업로드 실패");
+                }
+            }
+        } catch (error) {
+            console.error("이미지 업로드 오류:", error);
+            Alert.alert("오류", "이미지 업로드 중 문제가 발생했습니다.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const renderOptionalField = (
+        fieldKey: keyof typeof optionalFields,
+        label: string,
+        field: keyof DiaryData,
+        placeholder: string,
+        isMultiline: boolean = false
+    ) => {
+        if (!optionalFields[fieldKey]) return null;
+
+        if (fieldKey === "image") {
+            return (
+                <View style={styles.formContainer}>
+                    <View style={styles.fieldHeader}>
+                        <Text style={styles.label}>{label}</Text>
+                        <Pressable onPress={() => toggleField(fieldKey)} style={styles.removeButton}>
+                            <Text style={styles.removeButtonText}>-</Text>
+                        </Pressable>
+                    </View>
+                    <Pressable onPress={pickImage} style={styles.imageBox}>
+                        {isLoading ? (
+                            <Text>업로드 중...</Text>
+                        ) : diaryForm.image ? (
+                            <Image
+                                source={{ uri: diaryForm.image as string }}
+                                style={styles.imageBox}
+                                resizeMode="cover"
+                            />
+                        ) : (
+                            <Text style={styles.imageText}>터치하여 사진 추가</Text>
+                        )}
+                    </Pressable>
+                </View>
+            );
+        }
+
+        return (
+            <View style={styles.formContainer}>
+                <View style={styles.fieldHeader}>
+                    <Text style={styles.label}>{label}</Text>
+                    <Pressable onPress={() => toggleField(fieldKey)} style={styles.removeButton}>
+                        <Text style={styles.removeButtonText}>-</Text>
+                    </Pressable>
+                </View>
+                <TextInput
+                    style={[styles.input, isMultiline && styles.descInput]}
+                    value={diaryForm[field] as string}
+                    onChangeText={(text) => setDiaryForm({ ...diaryForm, [field]: text })}
+                    placeholder={placeholder}
+                    multiline={isMultiline}
+                    numberOfLines={isMultiline ? 6 : 1}
+                    keyboardType={field === "cost" ? "numeric" : "default"}
+                />
+            </View>
+        );
+    };
 
     useEffect(() => {
         if (event) {
@@ -53,20 +201,16 @@ const DiaryScreen = () => {
             setParsed(parsed);
             setIsDiary(true);
             setDiaryForm({
+                ...parsed,
                 title: parsed.title,
                 desc: parsed.desc,
                 date: parsed.date,
                 place: parsed.place,
-                mood: parsed.mood,
-                food: parsed.food,
-                weather: parsed.weather,
-                inning: parsed.inning,
                 team1: parsed.title.split("vs")[0],
                 team2: parsed.title.split("vs")[1],
                 inningScores: {},
-                best: parsed.best,
-                worst: parsed.worst,
-                isWin: "무",
+                team1Lineup: parsed.team1Lineup || ["", "", "", "", "", "", "", "", "", ""],
+                team2Lineup: parsed.team2Lineup || ["", "", "", "", "", "", "", "", "", ""],
             });
         }
     }, [event]);
@@ -89,7 +233,7 @@ const DiaryScreen = () => {
         const team1Score = calculateTeamScore(0);
         const team2Score = calculateTeamScore(1);
 
-        if (diaryForm.team1 === "삼성") {
+        if (diaryForm.team1.includes("삼성")) {
             if (team1Score === team2Score) {
                 setIsWin("무");
             } else if (team1Score > team2Score) {
@@ -106,7 +250,7 @@ const DiaryScreen = () => {
                 setIsWin("패");
             }
         }
-    }, []);
+    }, [diaryForm.inningScores]);
 
     const getTeamBackgroundColor = (teamIndex: number) => {
         const team1Score = calculateTeamScore(0);
@@ -123,6 +267,118 @@ const DiaryScreen = () => {
         }
     };
 
+    const updateLineup = (team: "team1" | "team2", index: number, value: string) => {
+        const lineupKey = team === "team1" ? "team1Lineup" : "team2Lineup";
+        const newLineup = [...(diaryForm[lineupKey] || Array(10).fill(""))];
+        newLineup[index] = value;
+        setDiaryForm({
+            ...diaryForm,
+            [lineupKey]: newLineup,
+        });
+    };
+
+    const db = getFirestore(); // Firestore 인스턴스 가져오기
+
+    const saveDiary = async () => {
+        if (!user || !user.uid) {
+            Alert.alert("오류", "사용자 정보를 찾을 수 없습니다.");
+            return;
+        }
+
+        if (!diaryForm.date || !diaryForm.place || !diaryForm.desc) {
+            Alert.alert("필수 정보 누락", "장소, 일기 내용은 필수 입력 항목입니다.");
+            return;
+        }
+
+        setIsLoading(true); // 저장 시작 로딩 표시
+        try {
+            // 사용자 문서 내 'diaries' 서브컬렉션에 일기 날짜를 문서 ID로 사용
+            const diaryDocRef = doc(db, "users", user.uid, "diaries", diaryForm.date);
+
+            // diaryForm 데이터를 Firestore에 저장
+            await setDoc(diaryDocRef, diaryForm);
+
+            Alert.alert("저장 성공", "일기가 성공적으로 저장되었습니다.");
+            setIsDiary(false);
+        } catch (error) {
+            console.error("일기 저장 오류: ", error);
+            Alert.alert("저장 실패", "일기 저장 중 오류가 발생했습니다.");
+        } finally {
+            setIsLoading(false); // 저장 완료 로딩 숨김
+        }
+    };
+
+    const deleteDiary = async () => {
+        if (!user || !user.uid) {
+            Alert.alert("오류", "사용자 정보를 찾을 수 없습니다.");
+            return;
+        }
+
+        if (!diaryForm.date) {
+            Alert.alert("오류", "삭제할 일기 정보를 찾을 수 없습니다.");
+            return;
+        }
+
+        Alert.alert(
+            "일기 삭제",
+            "정말 이 일기를 삭제하시겠습니까?",
+            [
+                { text: "취소", style: "cancel" },
+                {
+                    text: "삭제",
+                    onPress: async () => {
+                        setIsLoading(true); // 삭제 시작 로딩 표시
+                        try {
+                            const diaryDocRef = doc(db, "users", user.uid, "diaries", diaryForm.date);
+                            await deleteDoc(diaryDocRef);
+
+                            Alert.alert("삭제 성공", "일기가 성공적으로 삭제되었습니다.");
+                            setIsDiary(false); // 목록 화면으로 돌아가기
+                            // useEffect가 isDiary 변경을 감지하여 목록 자동 새로고침
+                        } catch (error) {
+                            console.error("일기 삭제 오류: ", error);
+                            Alert.alert("삭제 실패", "일기 삭제 중 오류가 발생했습니다.");
+                        } finally {
+                            setIsLoading(false); // 삭제 완료 로딩 숨김
+                        }
+                    },
+                    style: "destructive", // iOS에서 빨간색으로 표시
+                },
+            ],
+            { cancelable: true }
+        );
+    };
+
+    // 일기 목록 불러오기 useEffect 추가
+    useEffect(() => {
+        const fetchDiaries = async () => {
+            if (!user || !user.uid) {
+                // 사용자 정보 없으면 불러오지 않음
+                return;
+            }
+
+            try {
+                const querySnapshot = await getDocs(collection(db, "users", user.uid, "diaries"));
+                const diariesData: DiaryData[] = [];
+                querySnapshot.forEach((doc) => {
+                    // 문서 ID를 date로 사용했으므로 doc.id 사용
+                    diariesData.push({ ...(doc.data() as DiaryData), date: doc.id });
+                });
+                // 날짜 최신순 정렬 (필요하다면)
+                diariesData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                setDiaryContent(diariesData);
+            } catch (error) {
+                console.error("일기 목록 불러오기 오류: ", error);
+                Alert.alert("오류", "일기 목록을 불러오는데 실패했습니다.");
+            }
+        };
+
+        // isDiary가 false일 때만 목록 불러오도록 (일기 작성 중에는 목록 불필요)
+        if (!isDiary && user && user.uid) {
+            fetchDiaries();
+        }
+    }, [isDiary, user?.uid]); // isDiary 또는 사용자 ID 변경 시 재실행
+
     return (
         <SafeAreaView style={styles.container}>
             {isDiary ? (
@@ -134,18 +390,21 @@ const DiaryScreen = () => {
                         <View style={styles.titleContainer}>
                             <View
                                 style={{
-                                    backgroundColor:
-                                        isWin == "승" ? "#e6f3ff" : diaryForm.isWin == "패" ? "#ffe6e6" : "#f0f0f0",
+                                    backgroundColor: isWin == "승" ? "#e6f3ff" : isWin == "패" ? "#ffe6e6" : "#f0f0f0",
                                     paddingHorizontal: 4,
                                     paddingVertical: 2,
                                     borderRadius: 4,
                                 }}
                             >
-                                <Text style={{ color: "#353535", fontSize: 12 }}>{diaryForm.isWin}</Text>
+                                <Text style={{ color: "#353535", fontSize: 12 }}>{isWin}</Text>
                             </View>
                             <Text>{parsed?.title}</Text>
                             <Text>{parsed?.date}</Text>
                         </View>
+
+                        <Pressable onPress={saveDiary} disabled={isLoading} style={styles.saveButton}>
+                            <Text style={styles.saveButtonText}>{isLoading ? "저장 중..." : "저장"}</Text>
+                        </Pressable>
                     </View>
                     <ScrollView
                         style={{ flex: 1 }}
@@ -196,6 +455,7 @@ const DiaryScreen = () => {
                                                             styles.inningInput,
                                                             { backgroundColor: getTeamBackgroundColor(1) },
                                                         ]}
+                                                        editable={!isCancel}
                                                         placeholder="팀2"
                                                         value={diaryForm.team2}
                                                         onChangeText={(text) =>
@@ -223,6 +483,51 @@ const DiaryScreen = () => {
                                                                         style={styles.inningInput}
                                                                         value={calculateTeamScore(1).toString()}
                                                                         editable={false}
+                                                                    />
+                                                                </>
+                                                            ) : inning === "H" || inning === "E" || inning === "B" ? (
+                                                                <>
+                                                                    <TextInput
+                                                                        style={styles.inningInput}
+                                                                        placeholder="0"
+                                                                        keyboardType="numeric"
+                                                                        maxLength={2}
+                                                                        editable={!isCancel}
+                                                                        value={
+                                                                            diaryForm.inningScores?.[
+                                                                                `team1${inning}`
+                                                                            ] || ""
+                                                                        }
+                                                                        onChangeText={(text) =>
+                                                                            setDiaryForm({
+                                                                                ...diaryForm,
+                                                                                inningScores: {
+                                                                                    ...diaryForm.inningScores,
+                                                                                    [`team1${inning}`]: text,
+                                                                                },
+                                                                            })
+                                                                        }
+                                                                    />
+                                                                    <TextInput
+                                                                        style={styles.inningInput}
+                                                                        placeholder="0"
+                                                                        keyboardType="numeric"
+                                                                        maxLength={2}
+                                                                        editable={!isCancel}
+                                                                        value={
+                                                                            diaryForm.inningScores?.[
+                                                                                `team2${inning}`
+                                                                            ] || ""
+                                                                        }
+                                                                        onChangeText={(text) =>
+                                                                            setDiaryForm({
+                                                                                ...diaryForm,
+                                                                                inningScores: {
+                                                                                    ...diaryForm.inningScores,
+                                                                                    [`team2${inning}`]: text,
+                                                                                },
+                                                                            })
+                                                                        }
                                                                     />
                                                                 </>
                                                             ) : (
@@ -323,33 +628,6 @@ const DiaryScreen = () => {
                                 </View>
                             </View>
                             <View style={styles.formContainer}>
-                                <Text style={styles.label}>기분</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    value={diaryForm.mood}
-                                    onChangeText={(text) => setDiaryForm({ ...diaryForm, mood: text })}
-                                    placeholder="오늘의 기분을 입력하세요"
-                                />
-                            </View>
-                            <View style={styles.formContainer}>
-                                <Text style={styles.label}>날씨</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    value={diaryForm.weather}
-                                    onChangeText={(text) => setDiaryForm({ ...diaryForm, weather: text })}
-                                    placeholder="오늘의 날씨를 입력하세요"
-                                />
-                            </View>
-                            <View style={styles.formContainer}>
-                                <Text style={styles.label}>야푸</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    value={diaryForm.food}
-                                    onChangeText={(text) => setDiaryForm({ ...diaryForm, food: text })}
-                                    placeholder="오늘의 야푸를 입력하세요"
-                                />
-                            </View>
-                            <View style={styles.formContainer}>
                                 <Text style={styles.label}>일기</Text>
                                 <TextInput
                                     style={styles.descInput}
@@ -360,31 +638,146 @@ const DiaryScreen = () => {
                                     numberOfLines={6}
                                 />
                             </View>
-                            <View style={styles.formContainer}>
-                                <Text style={styles.label}>베스트</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    value={diaryForm.best}
-                                    onChangeText={(text) => setDiaryForm({ ...diaryForm, best: text })}
-                                    placeholder="오늘의 베스트선수를 입력하세요"
-                                />
-                            </View>
-                            <View style={styles.formContainer}>
-                                <Text style={styles.label}>워스트</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    value={diaryForm.worst}
-                                    onChangeText={(text) => setDiaryForm({ ...diaryForm, worst: text })}
-                                    placeholder="오늘의 워스트선수를 입력하세요"
-                                />
+                            {optionalFields.lineup && (
+                                <View style={styles.formContainer}>
+                                    <View style={styles.fieldHeader}>
+                                        <Text style={styles.label}>스타팅 라인업</Text>
+                                        <Pressable onPress={() => toggleField("lineup")} style={styles.removeButton}>
+                                            <Text style={styles.removeButtonText}>-</Text>
+                                        </Pressable>
+                                    </View>
+                                    <View style={styles.lineupContainer}>
+                                        <View style={styles.teamLineup}>
+                                            <TextInput
+                                                style={[
+                                                    styles.inningInput,
+                                                    { backgroundColor: getTeamBackgroundColor(0) },
+                                                ]}
+                                                editable={!isCancel}
+                                                placeholder="팀1"
+                                                value={diaryForm.team1}
+                                            />
+                                            {Array.from({ length: 10 }).map((_, index) => (
+                                                <View key={index} style={styles.lineupItem}>
+                                                    <Text style={styles.lineupInput}>
+                                                        {index == 9 ? "P" : index + 1}
+                                                    </Text>
+                                                    <TextInput
+                                                        style={[styles.lineupInput, { flex: 1 }]}
+                                                        placeholder="이름"
+                                                        value={diaryForm.team1Lineup?.[index] || ""}
+                                                        onChangeText={(text) => updateLineup("team1", index, text)}
+                                                    />
+                                                </View>
+                                            ))}
+                                        </View>
+                                        <View style={styles.teamLineup}>
+                                            <TextInput
+                                                style={[
+                                                    styles.inningInput,
+                                                    { backgroundColor: getTeamBackgroundColor(1) },
+                                                ]}
+                                                editable={!isCancel}
+                                                placeholder="팀2"
+                                                value={diaryForm.team2}
+                                            />
+                                            {Array.from({ length: 10 }).map((_, index) => (
+                                                <View key={index} style={styles.lineupItem}>
+                                                    <Text style={styles.lineupInput}>
+                                                        {index == 9 ? "P" : index + 1}
+                                                    </Text>
+                                                    <TextInput
+                                                        style={[styles.lineupInput, { flex: 1 }]}
+                                                        placeholder="이름"
+                                                        value={diaryForm.team2Lineup?.[index] || ""}
+                                                        onChangeText={(text) => updateLineup("team2", index, text)}
+                                                    />
+                                                </View>
+                                            ))}
+                                        </View>
+                                    </View>
+                                </View>
+                            )}
+                            {renderOptionalField("mood", "기분", "mood", "오늘의 기분을 입력하세요")}
+                            {renderOptionalField("cost", "지출", "cost", "오늘의 지출을 입력하세요")}
+                            {renderOptionalField("weather", "날씨", "weather", "오늘의 날씨를 입력하세요")}
+                            {renderOptionalField("food", "야푸", "food", "오늘의 야푸를 입력하세요")}
+                            {renderOptionalField("best", "베스트", "best", "오늘의 베스트선수를 입력하세요")}
+                            {renderOptionalField("worst", "워스트", "worst", "오늘의 워스트선수를 입력하세요")}
+                            <View style={styles.optionalFieldsContainer}>
+                                <Text style={styles.optionalFieldsTitle}>추가 정보</Text>
+                                <View style={styles.addButtonsContainer}>
+                                    {Object.entries(optionalFields).map(
+                                        ([fieldKey, isVisible]) =>
+                                            !isVisible && (
+                                                <Pressable
+                                                    key={fieldKey}
+                                                    onPress={() => toggleField(fieldKey as keyof typeof optionalFields)}
+                                                    style={styles.addButton}
+                                                >
+                                                    <Text style={styles.addButtonText}>
+                                                        +{" "}
+                                                        {fieldKey === "mood"
+                                                            ? "기분"
+                                                            : fieldKey === "weather"
+                                                            ? "날씨"
+                                                            : fieldKey === "food"
+                                                            ? "야푸"
+                                                            : fieldKey === "best"
+                                                            ? "베스트"
+                                                            : fieldKey === "worst"
+                                                            ? "워스트"
+                                                            : fieldKey === "lineup"
+                                                            ? "라인업"
+                                                            : fieldKey === "cost"
+                                                            ? "지출"
+                                                            : fieldKey === "image"
+                                                            ? "사진"
+                                                            : fieldKey}
+                                                    </Text>
+                                                </Pressable>
+                                            )
+                                    )}
+                                </View>
                             </View>
                         </View>
+                        {diaryForm.date && (
+                            <Pressable onPress={deleteDiary} disabled={isLoading} style={styles.deleteButton}>
+                                <IconSymbol name="trash" size={20} color="#dc3545" />
+                                <Text style={styles.deleteButtonText}>삭제</Text>
+                            </Pressable>
+                        )}
                     </ScrollView>
                 </View>
             ) : diaryContent.length > 0 ? (
-                <View>
-                    <Text>ddd</Text>
-                </View>
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingVertical: 20 }}>
+                    {diaryContent.map((diary) => (
+                        <Pressable
+                            key={diary.date}
+                            style={styles.diaryListItem}
+                            onPress={() => {
+                                // 목록 항목 클릭 시 해당 일기 불러와서 보여주는 로직 추가
+                                setParsed(diary);
+                                setDiaryForm({
+                                    // 불러온 데이터로 diaryForm 상태 설정
+                                    ...diary,
+                                    team1: diary.title.split("vs")[0] || "", // title에서 팀 이름 파싱
+                                    team2: diary.title.split("vs")[1] || "",
+                                    // 필요하다면 inningScores, lineup 등도 여기서 설정
+                                    inningScores: diary.inningScores || {},
+                                    team1Lineup: diary.team1Lineup || Array(10).fill(""),
+                                    team2Lineup: diary.team2Lineup || Array(10).fill(""),
+                                    cost: diary.cost || 0,
+                                    image: diary.image || "",
+                                });
+                                setIsDiary(true); // 일기 작성/수정 화면으로 전환
+                            }}
+                        >
+                            <Text style={styles.diaryItemDate}>{diary.date}</Text>
+                            <Text style={styles.diaryItemTitle}>{diary.title}</Text>
+                        </Pressable>
+                    ))}
+                </ScrollView>
             ) : (
                 <View style={styles.diaryContainer}>
                     <Text>아직 기록된 일기가 없어요 😢</Text>
@@ -556,6 +949,139 @@ const styles = StyleSheet.create({
     cancelText: {
         fontSize: 12,
         color: "#353535",
+    },
+    lineupContainer: {
+        flexDirection: "row",
+        gap: 10,
+        marginTop: 8,
+    },
+    teamLineup: {
+        flex: 1,
+    },
+    lineupInput: {
+        borderWidth: 1,
+        borderColor: "#e0e0e0",
+        borderRadius: 4,
+        padding: 4,
+        marginBottom: 4,
+        textAlign: "center",
+    },
+    lineupItem: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        flexWrap: "wrap",
+    },
+    fieldHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 8,
+    },
+    removeButton: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: "#ff6b6b",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    removeButtonText: {
+        color: "white",
+        fontSize: 16,
+        fontWeight: "bold",
+    },
+    optionalFieldsContainer: {
+        marginTop: 20,
+        marginBottom: 10,
+    },
+    optionalFieldsTitle: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: "#353535",
+        marginBottom: 10,
+    },
+    addButtonsContainer: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 8,
+    },
+    addButton: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        backgroundColor: "#e6f3ff",
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: "#b3d9ff",
+    },
+    addButtonText: {
+        color: "#0066cc",
+        fontSize: 14,
+    },
+    imageBox: {
+        width: 300,
+        height: 300,
+        borderRadius: 8,
+        overflow: "hidden",
+        backgroundColor: "#f0f0f0",
+        alignItems: "center",
+        justifyContent: "center",
+        marginTop: 8,
+        marginBottom: 8,
+    },
+    imageContainer: {
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    imageText: {
+        fontSize: 12,
+        color: "#353535",
+    },
+    saveButton: {
+        backgroundColor: "#007bff",
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 4,
+    },
+    saveButtonText: {
+        color: "white",
+        fontSize: 16,
+        fontWeight: "bold",
+    },
+    diaryListItem: {
+        padding: 15,
+        borderBottomWidth: 1,
+        borderBottomColor: "#e0e0e0",
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+    },
+    diaryItemDate: {
+        fontSize: 14,
+        color: "#555",
+    },
+    diaryItemTitle: {
+        fontSize: 16,
+        fontWeight: "bold",
+        color: "#333",
+        flex: 1, // 제목이 길 경우를 위해 flex 추가
+        marginLeft: 10, // 날짜와 제목 사이 간격
+    },
+    deleteButton: {
+        flexDirection: "row",
+        gap: 4,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 4,
+        marginRight: 10, // 저장 버튼과 간격
+    },
+    deleteButtonText: {
+        color: "#dc3545",
+        textAlign: "center",
+        fontSize: 16,
+        fontWeight: "normal",
     },
 });
 
