@@ -3,7 +3,7 @@ import Constants from "expo-constants";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { getAuth } from "firebase/auth";
-import { collection, deleteDoc, doc, getDocs, getFirestore, setDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, getDocs, getFirestore, setDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import { Alert, Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -196,26 +196,68 @@ const DiaryScreen = () => {
     };
 
     useEffect(() => {
-        if (event) {
-            const parsed = JSON.parse(event as string);
-            setParsed(parsed);
-            setIsDiary(true);
-            setDiaryForm({
-                ...parsed,
-                title: parsed.title,
-                desc: parsed.desc,
-                date: parsed.date,
-                place: parsed.place,
-                team1: parsed.title.split("vs")[0],
-                team2: parsed.title.split("vs")[1],
-                inningScores: {},
-                team1Lineup: parsed.team1Lineup || ["", "", "", "", "", "", "", "", "", ""],
-                team2Lineup: parsed.team2Lineup || ["", "", "", "", "", "", "", "", "", ""],
-            });
-        }
-    }, [event]);
+        const loadDiaryFromEvent = async () => {
+            if (event) {
+                const parsed = JSON.parse(event as string);
+                setParsed(parsed);
+                setIsDiary(true);
 
-    // 팀 스코어 계산 함수 추가
+                if (!user || !user.uid) {
+                    setDiaryForm({
+                        title: parsed.title || "",
+                        desc: parsed.desc || "",
+                        date: parsed.date || "",
+                        place: parsed.place || "",
+                        mood: parsed.mood || "",
+                        weather: parsed.weather || "",
+                        food: parsed.food || "",
+                        team1: parsed.title?.split("vs")[0]?.trim() || "",
+                        team2: parsed.title?.split("vs")[1]?.trim() || "",
+                        inningScores: parsed.inningScores || {},
+                        best: parsed.best || "",
+                        worst: parsed.worst || "",
+                        isWin: parsed.isWin || "무",
+                        team1Lineup: parsed.team1Lineup || Array(10).fill(""),
+                        team2Lineup: parsed.team2Lineup || Array(10).fill(""),
+                        cost: parsed.cost || 0,
+                        image: parsed.image || "",
+                    });
+                    return;
+                }
+
+                const diaryDocRef = doc(db, "users", user.uid, "diaries", parsed.date);
+                const diaryDocSnap = await getDoc(diaryDocRef);
+
+                if (diaryDocSnap.exists()) {
+                    const existingDiaryData = diaryDocSnap.data() as DiaryData;
+                    setDiaryForm(existingDiaryData);
+                } else {
+                    setDiaryForm({
+                        title: parsed.title || "",
+                        desc: parsed.desc || "",
+                        date: parsed.date || "",
+                        place: parsed.place || "",
+                        mood: parsed.mood || "",
+                        weather: parsed.weather || "",
+                        food: parsed.food || "",
+                        team1: parsed.title?.split("vs")[0]?.trim() || "",
+                        team2: parsed.title?.split("vs")[1]?.trim() || "",
+                        inningScores: parsed.inningScores || {},
+                        best: parsed.best || "",
+                        worst: parsed.worst || "",
+                        isWin: parsed.isWin || "무",
+                        team1Lineup: parsed.team1Lineup || Array(10).fill(""),
+                        team2Lineup: parsed.team2Lineup || Array(10).fill(""),
+                        cost: parsed.cost || 0,
+                        image: parsed.image || "",
+                    });
+                }
+            }
+        };
+
+        loadDiaryFromEvent();
+    }, [event, user?.uid]);
+
     const calculateTeamScore = (teamIndex: number) => {
         let total = 0;
         Object.entries(diaryForm.inningScores).forEach(([key, value]) => {
@@ -228,7 +270,6 @@ const DiaryScreen = () => {
         return total;
     };
 
-    // useEffect를 사용하여 스코어가 변경될 때만 isWin을 업데이트
     useEffect(() => {
         const team1Score = calculateTeamScore(0);
         const team2Score = calculateTeamScore(1);
@@ -277,7 +318,7 @@ const DiaryScreen = () => {
         });
     };
 
-    const db = getFirestore(); // Firestore 인스턴스 가져오기
+    const db = getFirestore();
 
     const saveDiary = async () => {
         if (!user || !user.uid) {
@@ -290,12 +331,9 @@ const DiaryScreen = () => {
             return;
         }
 
-        setIsLoading(true); // 저장 시작 로딩 표시
+        setIsLoading(true);
         try {
-            // 사용자 문서 내 'diaries' 서브컬렉션에 일기 날짜를 문서 ID로 사용
             const diaryDocRef = doc(db, "users", user.uid, "diaries", diaryForm.date);
-
-            // diaryForm 데이터를 Firestore에 저장
             await setDoc(diaryDocRef, diaryForm);
 
             Alert.alert("저장 성공", "일기가 성공적으로 저장되었습니다.");
@@ -304,7 +342,7 @@ const DiaryScreen = () => {
             console.error("일기 저장 오류: ", error);
             Alert.alert("저장 실패", "일기 저장 중 오류가 발생했습니다.");
         } finally {
-            setIsLoading(false); // 저장 완료 로딩 숨김
+            setIsLoading(false);
         }
     };
 
@@ -327,33 +365,30 @@ const DiaryScreen = () => {
                 {
                     text: "삭제",
                     onPress: async () => {
-                        setIsLoading(true); // 삭제 시작 로딩 표시
+                        setIsLoading(true);
                         try {
                             const diaryDocRef = doc(db, "users", user.uid, "diaries", diaryForm.date);
                             await deleteDoc(diaryDocRef);
 
                             Alert.alert("삭제 성공", "일기가 성공적으로 삭제되었습니다.");
-                            setIsDiary(false); // 목록 화면으로 돌아가기
-                            // useEffect가 isDiary 변경을 감지하여 목록 자동 새로고침
+                            setIsDiary(false);
                         } catch (error) {
                             console.error("일기 삭제 오류: ", error);
                             Alert.alert("삭제 실패", "일기 삭제 중 오류가 발생했습니다.");
                         } finally {
-                            setIsLoading(false); // 삭제 완료 로딩 숨김
+                            setIsLoading(false);
                         }
                     },
-                    style: "destructive", // iOS에서 빨간색으로 표시
+                    style: "destructive",
                 },
             ],
             { cancelable: true }
         );
     };
 
-    // 일기 목록 불러오기 useEffect 추가
     useEffect(() => {
         const fetchDiaries = async () => {
             if (!user || !user.uid) {
-                // 사용자 정보 없으면 불러오지 않음
                 return;
             }
 
@@ -361,10 +396,8 @@ const DiaryScreen = () => {
                 const querySnapshot = await getDocs(collection(db, "users", user.uid, "diaries"));
                 const diariesData: DiaryData[] = [];
                 querySnapshot.forEach((doc) => {
-                    // 문서 ID를 date로 사용했으므로 doc.id 사용
                     diariesData.push({ ...(doc.data() as DiaryData), date: doc.id });
                 });
-                // 날짜 최신순 정렬 (필요하다면)
                 diariesData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
                 setDiaryContent(diariesData);
             } catch (error) {
@@ -373,11 +406,10 @@ const DiaryScreen = () => {
             }
         };
 
-        // isDiary가 false일 때만 목록 불러오도록 (일기 작성 중에는 목록 불필요)
         if (!isDiary && user && user.uid) {
             fetchDiaries();
         }
-    }, [isDiary, user?.uid]); // isDiary 또는 사용자 ID 변경 시 재실행
+    }, [isDiary, user?.uid]);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -757,21 +789,18 @@ const DiaryScreen = () => {
                             key={diary.date}
                             style={styles.diaryListItem}
                             onPress={() => {
-                                // 목록 항목 클릭 시 해당 일기 불러와서 보여주는 로직 추가
                                 setParsed(diary);
                                 setDiaryForm({
-                                    // 불러온 데이터로 diaryForm 상태 설정
                                     ...diary,
-                                    team1: diary.title.split("vs")[0] || "", // title에서 팀 이름 파싱
+                                    team1: diary.title.split("vs")[0] || "",
                                     team2: diary.title.split("vs")[1] || "",
-                                    // 필요하다면 inningScores, lineup 등도 여기서 설정
                                     inningScores: diary.inningScores || {},
                                     team1Lineup: diary.team1Lineup || Array(10).fill(""),
                                     team2Lineup: diary.team2Lineup || Array(10).fill(""),
                                     cost: diary.cost || 0,
                                     image: diary.image || "",
                                 });
-                                setIsDiary(true); // 일기 작성/수정 화면으로 전환
+                                setIsDiary(true);
                             }}
                         >
                             <Text style={styles.diaryItemDate}>{diary.date}</Text>
@@ -1065,8 +1094,8 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: "bold",
         color: "#333",
-        flex: 1, // 제목이 길 경우를 위해 flex 추가
-        marginLeft: 10, // 날짜와 제목 사이 간격
+        flex: 1,
+        marginLeft: 10,
     },
     deleteButton: {
         flexDirection: "row",
@@ -1076,7 +1105,7 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         paddingHorizontal: 12,
         borderRadius: 4,
-        marginRight: 10, // 저장 버튼과 간격
+        marginRight: 10,
     },
     deleteButtonText: {
         color: "#dc3545",
