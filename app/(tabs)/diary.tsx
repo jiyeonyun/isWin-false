@@ -7,7 +7,7 @@ import { collection, deleteDoc, doc, getDoc, getDocs, getFirestore, setDoc } fro
 import React, { useEffect, useState } from "react";
 import { Alert, Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
-interface DiaryData {
+export interface DiaryData {
     title: string;
     desc: string;
     date: string;
@@ -274,24 +274,47 @@ const DiaryScreen = () => {
         const team1Score = calculateTeamScore(0);
         const team2Score = calculateTeamScore(1);
 
+        console.log("Team1 Score:", team1Score);
+        console.log("Team2 Score:", team2Score);
+        console.log("Inning Scores:", diaryForm.inningScores);
+
+        // 삼성팀이 team1인 경우
         if (diaryForm.team1.includes("삼성")) {
-            if (team1Score === team2Score) {
-                setIsWin("무");
-            } else if (team1Score > team2Score) {
+            if (team1Score > team2Score) {
                 setIsWin("승");
-            } else {
+                setDiaryForm({ ...diaryForm, isWin: "승" });
+            } else if (team1Score < team2Score) {
                 setIsWin("패");
-            }
-        } else {
-            if (team1Score === team2Score) {
+                setDiaryForm({ ...diaryForm, isWin: "패" });
+            } else {
                 setIsWin("무");
-            } else if (team2Score > team1Score) {
-                setIsWin("승");
-            } else {
-                setIsWin("패");
+                setDiaryForm({ ...diaryForm, isWin: "무" });
             }
         }
-    }, [diaryForm.inningScores]);
+        // 삼성팀이 team2인 경우
+        else if (diaryForm.team2.includes("삼성")) {
+            if (team2Score > team1Score) {
+                setIsWin("승");
+                setDiaryForm({ ...diaryForm, isWin: "승" });
+            } else if (team2Score < team1Score) {
+                setIsWin("패");
+                setDiaryForm({ ...diaryForm, isWin: "패" });
+            } else {
+                setIsWin("무");
+                setDiaryForm({ ...diaryForm, isWin: "무" });
+            }
+        }
+        // 삼성팀이 없는 경우
+        else {
+            if (team1Score > team2Score) {
+                setIsWin("승");
+            } else if (team1Score < team2Score) {
+                setIsWin("패");
+            } else {
+                setIsWin("무");
+            }
+        }
+    }, [diaryForm.inningScores, diaryForm.team1, diaryForm.team2]);
 
     const getTeamBackgroundColor = (teamIndex: number) => {
         const team1Score = calculateTeamScore(0);
@@ -333,8 +356,44 @@ const DiaryScreen = () => {
 
         setIsLoading(true);
         try {
+            // 현재 선택된 필드만 포함하는 객체 생성
+            const dataToSave = {
+                ...diaryForm,
+                // 선택적 필드들은 optionalFields의 상태에 따라 처리
+                mood: optionalFields.mood ? diaryForm.mood : "",
+                weather: optionalFields.weather ? diaryForm.weather : "",
+                food: optionalFields.food ? diaryForm.food : "",
+                best: optionalFields.best ? diaryForm.best : "",
+                worst: optionalFields.worst ? diaryForm.worst : "",
+                cost: optionalFields.cost ? diaryForm.cost : 0,
+                image: optionalFields.image ? diaryForm.image : "",
+                team1Lineup: optionalFields.lineup ? diaryForm.team1Lineup : Array(10).fill(""),
+                team2Lineup: optionalFields.lineup ? diaryForm.team2Lineup : Array(10).fill(""),
+            };
+
             const diaryDocRef = doc(db, "users", user.uid, "diaries", diaryForm.date);
-            await setDoc(diaryDocRef, diaryForm);
+            await setDoc(diaryDocRef, dataToSave);
+
+            // count 컬렉션 업데이트
+            const countRef = doc(db, "users", user.uid, "count", "stats");
+            const countDoc = await getDoc(countRef);
+
+            if (countDoc.exists()) {
+                // 기존 카운트 문서가 있는 경우
+                const currentCount = countDoc.data();
+                await setDoc(countRef, {
+                    win: (currentCount.win || 0) + (diaryForm.isWin === "승" ? 1 : 0),
+                    lose: (currentCount.lose || 0) + (diaryForm.isWin === "패" ? 1 : 0),
+                    draw: (currentCount.draw || 0) + (diaryForm.isWin === "무" ? 1 : 0),
+                });
+            } else {
+                // 새로운 카운트 문서 생성
+                await setDoc(countRef, {
+                    win: diaryForm.isWin === "승" ? 1 : 0,
+                    lose: diaryForm.isWin === "패" ? 1 : 0,
+                    draw: diaryForm.isWin === "무" ? 1 : 0,
+                });
+            }
 
             Alert.alert("저장 성공", "일기가 성공적으로 저장되었습니다.");
             setIsDiary(false);
@@ -792,8 +851,8 @@ const DiaryScreen = () => {
                                 setParsed(diary);
                                 setDiaryForm({
                                     ...diary,
-                                    team1: diary.title.split("vs")[0] || "",
-                                    team2: diary.title.split("vs")[1] || "",
+                                    team1: diary.title?.split("vs")[0]?.trim() || "",
+                                    team2: diary.title?.split("vs")[1]?.trim() || "",
                                     inningScores: diary.inningScores || {},
                                     team1Lineup: diary.team1Lineup || Array(10).fill(""),
                                     team2Lineup: diary.team2Lineup || Array(10).fill(""),
@@ -803,8 +862,9 @@ const DiaryScreen = () => {
                                 setIsDiary(true);
                             }}
                         >
-                            <Text style={styles.diaryItemDate}>{diary.date}</Text>
-                            <Text style={styles.diaryItemTitle}>{diary.title}</Text>
+                            <Text style={styles.diaryItemDate}>
+                                {diary.date} / {diary.title}
+                            </Text>
                         </Pressable>
                     ))}
                 </ScrollView>
