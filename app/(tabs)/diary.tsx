@@ -862,11 +862,33 @@ const DiaryScreen = () => {
                                 setIsDiary(true);
                             }}
                         >
-                            <Text style={styles.diaryItemDate}>
-                                {diary.date} / {diary.title}
-                            </Text>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+                                <Text style={styles.diaryItemDate}>{diary.date}</Text>
+                                <Text style={styles.diaryItemTitle}>
+                                    {diary.title?.split("vs")[0]?.trim() || ""} vs{" "}
+                                    {diary.title?.split("vs")[1]?.trim() || ""}
+                                </Text>
+                            </View>
                         </Pressable>
                     ))}
+                    <View
+                        style={{
+                            flexDirection: "row",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            marginTop: 20,
+                            marginBottom: 20,
+                            backgroundColor: "#e6f3ff",
+                            width: "70%",
+                            padding: 10,
+                            alignSelf: "center",
+                            borderRadius: 8,
+                        }}
+                    >
+                        <Pressable onPress={() => router.push("/calendar")}>
+                            <Text style={{ color: "#0003a9", fontSize: 14, fontWeight: "bold" }}>기록하기</Text>
+                        </Pressable>
+                    </View>
                 </ScrollView>
             ) : (
                 <View style={styles.diaryContainer}>

@@ -5,7 +5,8 @@ import { useIsFocused } from "@react-navigation/native";
 import { getAuth } from "firebase/auth";
 import { collection, doc, getDoc, getDocs, getFirestore } from "firebase/firestore";
 import { useEffect, useState } from "react";
-import { Alert, Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Dimensions, Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
+import { BarChart, LineChart, PieChart } from "react-native-chart-kit";
 import { DiaryData } from "./diary";
 
 export default function HomeScreen() {
@@ -20,6 +21,17 @@ export default function HomeScreen() {
     const [sequnceResultNumber, setSequnceResultNumber] = useState(0);
     const [sequnceResult, setSequnceResult] = useState("win");
     const [diaryContent, setDiaryContent] = useState<DiaryData[]>([]);
+    const [monthlyData, setMonthlyData] = useState<
+        { date: string; winRate: number; totalWinRate: number; winCount: number; totalGames: number }[]
+    >([]);
+    const [weeklyData, setWeeklyData] = useState<
+        { date: string; winRate: number; totalWinRate: number; winCount: number; totalGames: number }[]
+    >([]);
+    const [dailyData, setDailyData] = useState<
+        { date: string; winRate: number; totalWinRate: number; winCount: number; totalGames: number }[]
+    >([]);
+    const [selectedPeriod, setSelectedPeriod] = useState<"month" | "week" | "day">("month");
+    const [selectedStat, setSelectedStat] = useState<"winRate" | "winCount" | "totalGames" | "winLoss">("winRate");
     const isFocused = useIsFocused();
     const auth = getAuth();
     const user = auth.currentUser;
@@ -64,6 +76,9 @@ export default function HomeScreen() {
                 });
                 diariesData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
                 setDiaryContent(diariesData.slice(0, 3));
+
+                // 승률 데이터 계산
+                calculateWinRates(diariesData);
 
                 // 승무패 카운트 가져오기
                 const countRef = doc(db, "users", user.uid, "count", "stats");
@@ -119,6 +134,126 @@ export default function HomeScreen() {
         fetchDiaries();
     }, [isSetting, isFocused]);
 
+    const calculateWinRates = (diariesData: DiaryData[]) => {
+        const monthlyStats = new Map<string, { win: number; total: number }>();
+        console.log(monthlyStats);
+        const weeklyStats = new Map<string, { win: number; total: number }>();
+        const dailyStats = new Map<string, { win: number; total: number }>();
+
+        // 전체 승률 계산
+        let totalWin = 0;
+        let totalGames = 0;
+
+        diariesData.forEach((diary) => {
+            // 전체 통계 계산
+            totalGames++;
+            if (diary.isWin === "승") totalWin++;
+
+            const date = new Date(diary.date);
+            // 월간 통계는 연도와 월을 함께 사용 (예: "2024-6")
+            const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
+            // 주간 통계는 주차만 사용 (예: "1주차")
+            const weekKey = `${getWeekNumber(date)}주차`;
+            // 일간 통계는 날짜 사용 (예: "6/1")
+            const dayKey = `${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}`;
+
+            // 월간 통계
+            const monthStat = monthlyStats.get(monthKey) || { win: 0, total: 0 };
+            monthStat.total++;
+            if (diary.isWin === "승") monthStat.win++;
+            monthlyStats.set(monthKey, monthStat);
+
+            // 주간 통계
+            const weekStat = weeklyStats.get(weekKey) || { win: 0, total: 0 };
+            weekStat.total++;
+            if (diary.isWin === "승") weekStat.win++;
+            weeklyStats.set(weekKey, weekStat);
+
+            // 일간 통계
+            const dayStat = dailyStats.get(dayKey) || { win: 0, total: 0 };
+            dayStat.total++;
+            if (diary.isWin === "승") dayStat.win++;
+            dailyStats.set(dayKey, dayStat);
+        });
+
+        // 전체 승률 계산
+        const totalWinRate = totalGames > 0 ? Math.round((totalWin / totalGames) * 100) : 0;
+
+        // 데이터 포맷팅
+        interface MonthlyData {
+            date: string;
+            winRate: number;
+            totalWinRate: number;
+            winCount: number;
+            totalGames: number;
+            year: number;
+            month: number;
+        }
+
+        interface OtherData {
+            date: string;
+            winRate: number;
+            totalWinRate: number;
+            winCount: number;
+            totalGames: number;
+        }
+
+        const formatData = (stats: Map<string, { win: number; total: number }>) => {
+            return Array.from(stats.entries())
+                .map(([date, stat]): MonthlyData | OtherData => {
+                    // 월간 데이터 포맷팅
+                    if (date.includes("-")) {
+                        const [year, month] = date.split("-");
+                        const monthNum = parseInt(month);
+                        return {
+                            date: `${monthNum}월`,
+                            winRate: stat.total > 0 ? Math.round((stat.win / stat.total) * 100) : 0,
+                            totalWinRate: totalWinRate,
+                            winCount: stat.win,
+                            totalGames: stat.total,
+                            year: parseInt(year),
+                            month: monthNum,
+                        };
+                    }
+                    return {
+                        date,
+                        winRate: stat.total > 0 ? Math.round((stat.win / stat.total) * 100) : 0,
+                        totalWinRate: totalWinRate,
+                        winCount: stat.win,
+                        totalGames: stat.total,
+                    };
+                })
+                .sort((a, b) => {
+                    // 월간 정렬 (연도와 월 기준)
+                    if ("year" in a && "year" in b && "month" in a && "month" in b) {
+                        if (a.year !== b.year) return a.year - b.year;
+                        return a.month - b.month;
+                    }
+                    // 주간 정렬
+                    if (a.date.includes("주차")) {
+                        return parseInt(a.date) - parseInt(b.date);
+                    }
+                    // 일간 정렬
+                    return a.date.localeCompare(b.date);
+                });
+        };
+
+        // 데이터 설정 전에 로그 출력
+        console.log("Monthly Stats:", Array.from(monthlyStats.entries()));
+        const formattedMonthlyData = formatData(monthlyStats);
+        console.log("Formatted Monthly Data:", formattedMonthlyData);
+        setMonthlyData(formattedMonthlyData);
+        setWeeklyData(formatData(weeklyStats));
+        setDailyData(formatData(dailyStats));
+    };
+
+    // 주차 계산 함수
+    const getWeekNumber = (date: Date) => {
+        const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
+        const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000;
+        return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+    };
+
     const renderInfo = () => {
         return (
             <View style={styles.infoContainer}>
@@ -157,6 +292,234 @@ export default function HomeScreen() {
     };
 
     const renderGraph = () => {
+        const data = selectedPeriod === "month" ? monthlyData : selectedPeriod === "week" ? weeklyData : dailyData;
+
+        type ChartDataType = number[] | { win: number[]; lose: number[] };
+
+        const getChartData = (): ChartDataType => {
+            switch (selectedStat) {
+                case "winRate":
+                    // 승률: 월간/주간은 라인, 일간은 파이
+                    return data.map((d) => d.winRate);
+                case "winCount":
+                    // 승리: 일간/주간은 막대, 월간은 누적 막대
+                    return data.map((d) => d.winCount);
+                case "totalGames":
+                    // 경기수: 일간은 막대, 주간/월간은 라인
+                    return data.map((d) => d.totalGames);
+                case "winLoss":
+                    // 승패추이: 스택 바 차트
+                    return {
+                        win: data.map((d) => d.winCount),
+                        lose: data.map((d) => d.totalGames - d.winCount),
+                    };
+                default:
+                    return data.map((d) => d.winRate);
+            }
+        };
+
+        const renderChart = () => {
+            switch (selectedStat) {
+                case "winRate":
+                    if (selectedPeriod === "day") {
+                        // 일간 승률: 파이 차트
+                        return (
+                            <PieChart
+                                data={[
+                                    {
+                                        name: "승",
+                                        population: data[0]?.winCount || 0,
+                                        color: "#459bf8",
+                                        legendFontColor: "#7F7F7F",
+                                        legendFontSize: 12,
+                                    },
+                                    {
+                                        name: "패",
+                                        population: (data[0]?.totalGames || 0) - (data[0]?.winCount || 0),
+                                        color: "#c8eff7",
+                                        legendFontColor: "#7F7F7F",
+                                        legendFontSize: 12,
+                                    },
+                                ]}
+                                width={Dimensions.get("window").width - 80}
+                                height={220}
+                                chartConfig={{
+                                    backgroundColor: "#ffffff",
+                                    backgroundGradientFrom: "#ffffff",
+                                    backgroundGradientTo: "#ffffff",
+                                    decimalPlaces: 0,
+                                    color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                                    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                                }}
+                                accessor="population"
+                                backgroundColor="transparent"
+                                paddingLeft="15"
+                                absolute
+                            />
+                        );
+                    } else {
+                        // 월간/주간 승률: 라인 차트
+                        return (
+                            <LineChart
+                                data={{
+                                    labels: data.map((d) => d.date),
+                                    datasets: [{ data: getChartData() as number[] }],
+                                }}
+                                width={Math.max(Dimensions.get("window").width - 40, data.length * 50)}
+                                height={220}
+                                chartConfig={{
+                                    backgroundColor: "#ffffff",
+                                    backgroundGradientFrom: "#ffffff",
+                                    backgroundGradientTo: "#ffffff",
+                                    decimalPlaces: 0,
+                                    color: (opacity = 1) => `rgba(0, 122, 255, ${opacity})`,
+                                    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                                }}
+                                bezier
+                                style={styles.chart}
+                                yLabelsOffset={-12}
+                            />
+                        );
+                    }
+
+                case "winCount":
+                    if (selectedPeriod === "month") {
+                        // 월간 승리: 누적 막대 그래프
+                        return (
+                            <BarChart
+                                data={{
+                                    labels: data.map((d) => d.date),
+                                    datasets: [{ data: getChartData() as number[] }],
+                                }}
+                                width={Math.max(Dimensions.get("window").width - 40, data.length * 50)}
+                                height={220}
+                                yAxisLabel=""
+                                yAxisSuffix=""
+                                chartConfig={{
+                                    backgroundColor: "#ffffff",
+                                    backgroundGradientFrom: "#ffffff",
+                                    backgroundGradientTo: "#ffffff",
+                                    decimalPlaces: 0,
+                                    color: (opacity = 1) => `rgba(0, 122, 255, ${opacity})`,
+                                    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                                }}
+                                style={styles.chart}
+                                yLabelsOffset={-15}
+                            />
+                        );
+                    } else {
+                        // 일간/주간 승리: 단일 막대 그래프
+                        return (
+                            <BarChart
+                                data={{
+                                    labels: data.map((d) => d.date),
+                                    datasets: [{ data: getChartData() as number[] }],
+                                }}
+                                width={Math.max(Dimensions.get("window").width - 40, data.length * 50)}
+                                height={220}
+                                yAxisLabel=""
+                                yAxisSuffix=""
+                                chartConfig={{
+                                    backgroundColor: "#ffffff",
+                                    backgroundGradientFrom: "#ffffff",
+                                    backgroundGradientTo: "#ffffff",
+                                    decimalPlaces: 0,
+                                    color: (opacity = 1) => `rgba(0, 122, 255, ${opacity})`,
+                                    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                                }}
+                                style={styles.chart}
+                                yLabelsOffset={-15}
+                            />
+                        );
+                    }
+
+                case "totalGames":
+                    if (selectedPeriod === "day") {
+                        // 일간 경기수: 막대 그래프
+                        return (
+                            <BarChart
+                                data={{
+                                    labels: data.map((d) => d.date),
+                                    datasets: [{ data: getChartData() as number[] }],
+                                }}
+                                width={Math.max(Dimensions.get("window").width - 40, data.length * 50)}
+                                height={220}
+                                yAxisLabel=""
+                                yAxisSuffix=""
+                                chartConfig={{
+                                    backgroundColor: "#ffffff",
+                                    backgroundGradientFrom: "#ffffff",
+                                    backgroundGradientTo: "#ffffff",
+                                    decimalPlaces: 0,
+                                    color: (opacity = 1) => `rgba(0, 122, 255, ${opacity})`,
+                                    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                                }}
+                                style={styles.chart}
+                                yLabelsOffset={-10}
+                            />
+                        );
+                    } else {
+                        // 주간/월간 경기수: 라인 그래프
+                        return (
+                            <LineChart
+                                data={{
+                                    labels: data.map((d) => d.date),
+                                    datasets: [{ data: getChartData() as number[] }],
+                                }}
+                                width={Math.max(Dimensions.get("window").width - 40, data.length * 50)}
+                                height={220}
+                                chartConfig={{
+                                    backgroundColor: "#ffffff",
+                                    backgroundGradientFrom: "#ffffff",
+                                    backgroundGradientTo: "#ffffff",
+                                    decimalPlaces: 0,
+                                    color: (opacity = 1) => `rgba(0, 122, 255, ${opacity})`,
+                                    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                                }}
+                                bezier
+                                style={styles.chart}
+                                yLabelsOffset={-15}
+                            />
+                        );
+                    }
+
+                case "winLoss":
+                    // 승패추이: 스택 바 차트
+                    const winLossData = getChartData() as { win: number[]; lose: number[] };
+                    return (
+                        <BarChart
+                            data={{
+                                labels: data.map((d) => d.date),
+                                datasets: [
+                                    {
+                                        data: winLossData.win,
+                                        color: (opacity = 1) => `rgba(69, 155, 248, ${opacity})`, // 승리
+                                    },
+                                    {
+                                        data: winLossData.lose,
+                                        color: (opacity = 1) => `rgba(200, 239, 247, ${opacity})`, // 패배
+                                    },
+                                ],
+                            }}
+                            width={Math.max(Dimensions.get("window").width - 40, data.length * 50)}
+                            height={220}
+                            yAxisLabel=""
+                            yAxisSuffix=""
+                            chartConfig={{
+                                backgroundColor: "#ffffff",
+                                backgroundGradientFrom: "#ffffff",
+                                backgroundGradientTo: "#ffffff",
+                                decimalPlaces: 0,
+                                color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                                labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                            }}
+                            style={styles.chart}
+                            yLabelsOffset={0}
+                        />
+                    );
+            }
+        };
+
         return (
             <View style={styles.graphContainer}>
                 <Text>지금까지 {name || "설정해주세요"} 님의 직관 승률은 </Text>
@@ -170,11 +533,70 @@ export default function HomeScreen() {
                     현재 직관 <Text style={{ fontWeight: "bold" }}>{sequnceResultNumber}</Text>{" "}
                     {sequnceResult == "win" ? "연승" : "연패"} 중입니다.
                 </Text>
-                <View style={styles.graphContainer}>
-                    <View style={styles.graph}>
-                        <Text>그래프 들어가야함</Text>
-                    </View>
+
+                {/* 통계 선택 버튼 */}
+                <View style={styles.statSelector}>
+                    <Pressable
+                        style={[styles.statButton, selectedStat === "winRate" && styles.selectedStat]}
+                        onPress={() => setSelectedStat("winRate")}
+                    >
+                        <Text style={selectedStat === "winRate" ? styles.selectedStatText : styles.statText}>승률</Text>
+                    </Pressable>
+                    <Pressable
+                        style={[styles.statButton, selectedStat === "winLoss" && styles.selectedStat]}
+                        onPress={() => setSelectedStat("winLoss")}
+                    >
+                        <Text style={selectedStat === "winLoss" ? styles.selectedStatText : styles.statText}>
+                            승패 추이
+                        </Text>
+                    </Pressable>
+                    <Pressable
+                        style={[styles.statButton, selectedStat === "winCount" && styles.selectedStat]}
+                        onPress={() => setSelectedStat("winCount")}
+                    >
+                        <Text style={selectedStat === "winCount" ? styles.selectedStatText : styles.statText}>
+                            승리
+                        </Text>
+                    </Pressable>
+                    <Pressable
+                        style={[styles.statButton, selectedStat === "totalGames" && styles.selectedStat]}
+                        onPress={() => setSelectedStat("totalGames")}
+                    >
+                        <Text style={selectedStat === "totalGames" ? styles.selectedStatText : styles.statText}>
+                            경기수
+                        </Text>
+                    </Pressable>
                 </View>
+
+                {/* 기간 선택 버튼 */}
+                <View style={styles.periodSelector}>
+                    <Pressable
+                        style={[styles.periodButton, selectedPeriod === "month" && styles.selectedPeriod]}
+                        onPress={() => setSelectedPeriod("month")}
+                    >
+                        <Text style={selectedPeriod === "month" ? styles.selectedPeriodText : styles.periodText}>
+                            월간
+                        </Text>
+                    </Pressable>
+                    <Pressable
+                        style={[styles.periodButton, selectedPeriod === "week" && styles.selectedPeriod]}
+                        onPress={() => setSelectedPeriod("week")}
+                    >
+                        <Text style={selectedPeriod === "week" ? styles.selectedPeriodText : styles.periodText}>
+                            주간
+                        </Text>
+                    </Pressable>
+                    <Pressable
+                        style={[styles.periodButton, selectedPeriod === "day" && styles.selectedPeriod]}
+                        onPress={() => setSelectedPeriod("day")}
+                    >
+                        <Text style={selectedPeriod === "day" ? styles.selectedPeriodText : styles.periodText}>
+                            일간
+                        </Text>
+                    </Pressable>
+                </View>
+
+                <View style={styles.chartContainer}>{renderChart()}</View>
             </View>
         );
     };
@@ -190,6 +612,7 @@ export default function HomeScreen() {
             </View>
         );
     };
+
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView>
@@ -251,5 +674,67 @@ const styles = StyleSheet.create({
         padding: 16,
         margin: 16,
         borderRadius: 16,
+    },
+    periodSelector: {
+        flexDirection: "row",
+        justifyContent: "space-around",
+        marginVertical: 10,
+    },
+    periodButton: {
+        paddingHorizontal: 20,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: "#f0f0f0",
+    },
+    selectedPeriod: {
+        backgroundColor: "#007AFF",
+    },
+    chart: {
+        marginVertical: 8,
+        borderRadius: 16,
+        paddingRight: 16,
+        paddingLeft: 20,
+    },
+    statSelector: {
+        flexDirection: "row",
+        justifyContent: "space-around",
+        marginVertical: 10,
+    },
+    statButton: {
+        paddingHorizontal: 20,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: "#f0f0f0",
+    },
+    selectedStat: {
+        backgroundColor: "#007AFF",
+    },
+    statText: {
+        color: "#000000",
+    },
+    selectedStatText: {
+        color: "#ffffff",
+    },
+    periodText: {
+        color: "#000000",
+    },
+    selectedPeriodText: {
+        color: "#ffffff",
+    },
+    pieChartContainer: {
+        marginTop: 20,
+        alignItems: "center",
+    },
+    lineChartContainer: {
+        marginTop: 20,
+    },
+    chartTitle: {
+        fontSize: 16,
+        fontWeight: "bold",
+        marginBottom: 10,
+        textAlign: "center",
+    },
+    chartContainer: {
+        marginTop: 20,
     },
 });
