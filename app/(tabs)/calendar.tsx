@@ -105,7 +105,7 @@ export default function CalendarScreen() {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.headerText}>경기 일정 🦁</Text>
+                <Text style={styles.headerText}>경기 일정 </Text>
             </View>
             <View style={styles.calendarContainer}>
                 <Calendar
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     header: {
-        padding: 10,
+        padding: 16,
     },
     calendarContainer: {
         padding: 16,

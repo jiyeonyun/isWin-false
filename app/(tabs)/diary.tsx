@@ -25,6 +25,7 @@ export interface DiaryData {
     team2Lineup: string[];
     cost: number;
     image: any;
+    isCancle: boolean;
 }
 
 const DiaryScreen = () => {
@@ -35,14 +36,13 @@ const DiaryScreen = () => {
     const router = useRouter();
     const [isExtraInning, setIsExtraInning] = useState(false);
     const [innigs, setInnings] = useState<any[]>([1, 2, 3, 4, 5, 6, 7, 8, 9, "R", "H", "E", "B"]);
-    const [isCancel, setIsCancel] = useState(false);
     const [diaryContent, setDiaryContent] = useState<DiaryData[]>([]);
     const [isDiary, setIsDiary] = useState<boolean>(false);
     const [parsed, setParsed] = useState<DiaryData>();
     const [isWin, setIsWin] = useState<string>("무");
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [originWin, setOriginWin] = useState<string>("무");
-
+    const [originCancle, setOriginCancle] = useState<boolean>(false);
     const [diaryForm, setDiaryForm] = useState<DiaryData>({
         title: "",
         desc: "",
@@ -61,6 +61,7 @@ const DiaryScreen = () => {
         team2Lineup: ["", "", "", "", "", "", "", "", "", ""],
         cost: 0,
         image: "",
+        isCancle: false,
     });
 
     const [optionalFields, setOptionalFields] = useState({
@@ -74,6 +75,7 @@ const DiaryScreen = () => {
         image: false,
     });
 
+    console.log(diaryForm.isCancle);
     const toggleField = (field: keyof typeof optionalFields) => {
         setOptionalFields((prev) => ({
             ...prev,
@@ -222,6 +224,7 @@ const DiaryScreen = () => {
                         team2Lineup: parsed.team2Lineup || Array(10).fill(""),
                         cost: parsed.cost || 0,
                         image: parsed.image || "",
+                        isCancle: parsed.isCancle || false,
                     });
                     return;
                 }
@@ -233,6 +236,7 @@ const DiaryScreen = () => {
                     const existingDiaryData = diaryDocSnap.data() as DiaryData;
                     setDiaryForm(existingDiaryData);
                     setOriginWin(existingDiaryData.isWin);
+                    setOriginCancle(existingDiaryData.isCancle);
                 } else {
                     setDiaryForm({
                         title: parsed.title || "",
@@ -252,8 +256,10 @@ const DiaryScreen = () => {
                         team2Lineup: parsed.team2Lineup || Array(10).fill(""),
                         cost: parsed.cost || 0,
                         image: parsed.image || "",
+                        isCancle: parsed.isCancle || false,
                     });
                     setOriginWin(parsed.isWin);
+                    setOriginCancle(parsed.isCancle);
                 }
             }
         };
@@ -379,24 +385,71 @@ const DiaryScreen = () => {
 
             if (countDoc.exists()) {
                 const currentCount = countDoc.data();
-                // 이전 승패 상태 감소
-                if (originWin === "승") {
-                    currentCount.win = (currentCount.win || 0) - 1;
-                } else if (originWin === "패") {
-                    currentCount.lose = (currentCount.lose || 0) - 1;
-                } else if (originWin === "무") {
-                    currentCount.draw = (currentCount.draw || 0) - 1;
+                // 이전 상태가 없는 경우 (새로운 일기)
+                if (!originWin && !originCancle) {
+                    // 1. 승/무/패 상태인 경우
+                    if (!diaryForm.isCancle) {
+                        if (diaryForm.isWin === "승") {
+                            currentCount.win = (currentCount.win || 0) + 1;
+                        } else if (diaryForm.isWin === "패") {
+                            currentCount.lose = (currentCount.lose || 0) + 1;
+                        } else if (diaryForm.isWin === "무") {
+                            currentCount.draw = (currentCount.draw || 0) + 1;
+                        }
+                    }
+                    // 2. 취소 상태인 경우
+                    else {
+                        currentCount.cancle = (currentCount.cancle || 0) + 1;
+                    }
                 }
-
-                // 새로운 승패 상태 증가
-                if (diaryForm.isWin === "승") {
-                    currentCount.win = (currentCount.win || 0) + 1;
-                } else if (diaryForm.isWin === "패") {
-                    currentCount.lose = (currentCount.lose || 0) + 1;
-                } else if (diaryForm.isWin === "무") {
-                    currentCount.draw = (currentCount.draw || 0) + 1;
+                // 이전 상태가 있는 경우
+                else {
+                    // 3. 승/무/패 상태 변경
+                    if (!originCancle && !diaryForm.isCancle) {
+                        // 이전 승/무/패 카운트 감소
+                        if (originWin === "승") {
+                            currentCount.win = (currentCount.win || 0) - 1;
+                        } else if (originWin === "패") {
+                            currentCount.lose = (currentCount.lose || 0) - 1;
+                        } else if (originWin === "무") {
+                            currentCount.draw = (currentCount.draw || 0) - 1;
+                        }
+                        // 새로운 승/무/패 카운트 증가
+                        if (diaryForm.isWin === "승") {
+                            currentCount.win = (currentCount.win || 0) + 1;
+                        } else if (diaryForm.isWin === "패") {
+                            currentCount.lose = (currentCount.lose || 0) + 1;
+                        } else if (diaryForm.isWin === "무") {
+                            currentCount.draw = (currentCount.draw || 0) + 1;
+                        }
+                    }
+                    // 4. 정상 -> 취소 상태로 변경
+                    else if (!originCancle && diaryForm.isCancle) {
+                        // 이전 승/무/패 카운트 감소
+                        if (originWin === "승") {
+                            currentCount.win = (currentCount.win || 0) - 1;
+                        } else if (originWin === "패") {
+                            currentCount.lose = (currentCount.lose || 0) - 1;
+                        } else if (originWin === "무") {
+                            currentCount.draw = (currentCount.draw || 0) - 1;
+                        }
+                        // 취소 카운트 증가
+                        currentCount.cancle = (currentCount.cancle || 0) + 1;
+                    }
+                    // 5. 취소 -> 정상 상태로 변경
+                    else if (originCancle && !diaryForm.isCancle) {
+                        // 취소 카운트 감소
+                        currentCount.cancle = (currentCount.cancle || 0) - 1;
+                        // 새로운 승/무/패 카운트 증가
+                        if (diaryForm.isWin === "승") {
+                            currentCount.win = (currentCount.win || 0) + 1;
+                        } else if (diaryForm.isWin === "패") {
+                            currentCount.lose = (currentCount.lose || 0) + 1;
+                        } else if (diaryForm.isWin === "무") {
+                            currentCount.draw = (currentCount.draw || 0) + 1;
+                        }
+                    }
                 }
-
                 await setDoc(countRef, currentCount);
             } else {
                 // 새로운 카운트 문서 생성
@@ -404,6 +457,7 @@ const DiaryScreen = () => {
                     win: diaryForm.isWin === "승" ? 1 : 0,
                     lose: diaryForm.isWin === "패" ? 1 : 0,
                     draw: diaryForm.isWin === "무" ? 1 : 0,
+                    cancle: diaryForm.isCancle ? 1 : 0,
                 });
             }
 
@@ -432,7 +486,10 @@ const DiaryScreen = () => {
             "일기 삭제",
             "정말 이 일기를 삭제하시겠습니까?",
             [
-                { text: "취소", style: "cancel" },
+                {
+                    text: "취소",
+                    style: "cancel",
+                },
                 {
                     text: "삭제",
                     onPress: async () => {
@@ -455,7 +512,9 @@ const DiaryScreen = () => {
                                 } else if (diaryForm.isWin === "무") {
                                     currentCount.draw = (currentCount.draw || 0) - 1;
                                 }
-
+                                if (diaryForm.isCancle) {
+                                    currentCount.cancle = (currentCount.cancle || 0) - 1;
+                                }
                                 await setDoc(countRef, currentCount);
                             }
 
@@ -513,8 +572,13 @@ const DiaryScreen = () => {
             cost: diary.cost || 0,
             image: diary.image || "",
         });
-        setOriginWin(diary.isWin); // originWin 설정 추가
+        setOriginWin(diary.isWin);
+        setOriginCancle(diary.isCancle); // originWin 설정 추가
         setIsDiary(true);
+    };
+
+    const handleCancelToggle = () => {
+        setDiaryForm((prev) => ({ ...prev, isCancle: !prev.isCancle }));
     };
 
     return (
@@ -526,16 +590,30 @@ const DiaryScreen = () => {
                             <IconSymbol name="arrow.left" size={24} color="#505050" />
                         </Pressable>
                         <View style={styles.titleContainer}>
-                            <View
-                                style={{
-                                    backgroundColor: isWin == "승" ? "#e6f3ff" : isWin == "패" ? "#ffe6e6" : "#f0f0f0",
-                                    paddingHorizontal: 4,
-                                    paddingVertical: 2,
-                                    borderRadius: 4,
-                                }}
-                            >
-                                <Text style={{ color: "#353535", fontSize: 12 }}>{isWin}</Text>
-                            </View>
+                            {parsed?.isCancle ? (
+                                <View
+                                    style={{
+                                        backgroundColor: "#f0f0f0",
+                                        paddingHorizontal: 4,
+                                        paddingVertical: 2,
+                                        borderRadius: 4,
+                                    }}
+                                >
+                                    <Text style={{ color: "#353535", fontSize: 12 }}>취소</Text>
+                                </View>
+                            ) : (
+                                <View
+                                    style={{
+                                        backgroundColor:
+                                            isWin == "승" ? "#e6f3ff" : isWin == "패" ? "#ffe6e6" : "#f0f0f0",
+                                        paddingHorizontal: 4,
+                                        paddingVertical: 2,
+                                        borderRadius: 4,
+                                    }}
+                                >
+                                    <Text style={{ color: "#353535", fontSize: 12 }}>{isWin}</Text>
+                                </View>
+                            )}
                             <Text>{parsed?.title}</Text>
                             <Text>{parsed?.date}</Text>
                         </View>
@@ -578,7 +656,7 @@ const DiaryScreen = () => {
                                                             styles.inningInput,
                                                             { backgroundColor: getTeamBackgroundColor(0) },
                                                         ]}
-                                                        editable={!isCancel}
+                                                        editable={!diaryForm.isCancle}
                                                         placeholder="팀1"
                                                         value={diaryForm.team1}
                                                         onChangeText={(text) =>
@@ -593,7 +671,7 @@ const DiaryScreen = () => {
                                                             styles.inningInput,
                                                             { backgroundColor: getTeamBackgroundColor(1) },
                                                         ]}
-                                                        editable={!isCancel}
+                                                        editable={!diaryForm.isCancle}
                                                         placeholder="팀2"
                                                         value={diaryForm.team2}
                                                         onChangeText={(text) =>
@@ -605,7 +683,7 @@ const DiaryScreen = () => {
                                                     />
                                                 </View>
                                             </View>
-                                            {!isCancel ? (
+                                            {!diaryForm.isCancle ? (
                                                 innigs.map((inning) => (
                                                     <View key={inning} style={styles.inningColumn}>
                                                         <Text style={styles.inningNumber}>{inning}</Text>
@@ -630,7 +708,7 @@ const DiaryScreen = () => {
                                                                         placeholder="0"
                                                                         keyboardType="numeric"
                                                                         maxLength={2}
-                                                                        editable={!isCancel}
+                                                                        editable={!diaryForm.isCancle}
                                                                         value={
                                                                             diaryForm.inningScores?.[
                                                                                 `team1${inning}`
@@ -651,7 +729,7 @@ const DiaryScreen = () => {
                                                                         placeholder="0"
                                                                         keyboardType="numeric"
                                                                         maxLength={2}
-                                                                        editable={!isCancel}
+                                                                        editable={!diaryForm.isCancle}
                                                                         value={
                                                                             diaryForm.inningScores?.[
                                                                                 `team2${inning}`
@@ -675,7 +753,7 @@ const DiaryScreen = () => {
                                                                         placeholder="0"
                                                                         keyboardType="numeric"
                                                                         maxLength={2}
-                                                                        editable={!isCancel}
+                                                                        editable={!diaryForm.isCancle}
                                                                         value={
                                                                             diaryForm.inningScores?.[`${inning}초`] ||
                                                                             ""
@@ -694,7 +772,7 @@ const DiaryScreen = () => {
                                                                         style={styles.inningInput}
                                                                         placeholder="0"
                                                                         keyboardType="numeric"
-                                                                        editable={!isCancel}
+                                                                        editable={!diaryForm.isCancle}
                                                                         maxLength={2}
                                                                         value={
                                                                             diaryForm.inningScores?.[`${inning}말`] ||
@@ -757,10 +835,12 @@ const DiaryScreen = () => {
                                             <Text>{isExtraInning ? "정규" : "연장"}</Text>
                                         </Pressable>
                                         <Pressable
-                                            style={[styles.cancelButton, isCancel && styles.iscancelBtn]}
-                                            onPress={() => setIsCancel(!isCancel)}
+                                            style={[styles.cancelButton, diaryForm.isCancle && styles.iscancelBtn]}
+                                            onPress={handleCancelToggle}
                                         >
-                                            <Text style={{ color: "#353535" }}>{isCancel ? "정상" : "취소"}</Text>
+                                            <Text style={{ color: "#353535" }}>
+                                                {diaryForm.isCancle ? "정상" : "취소"}
+                                            </Text>
                                         </Pressable>
                                     </View>
                                 </View>
@@ -791,7 +871,7 @@ const DiaryScreen = () => {
                                                     styles.inningInput,
                                                     { backgroundColor: getTeamBackgroundColor(0) },
                                                 ]}
-                                                editable={!isCancel}
+                                                editable={!diaryForm.isCancle}
                                                 placeholder="팀1"
                                                 value={diaryForm.team1}
                                             />
@@ -815,7 +895,7 @@ const DiaryScreen = () => {
                                                     styles.inningInput,
                                                     { backgroundColor: getTeamBackgroundColor(1) },
                                                 ]}
-                                                editable={!isCancel}
+                                                editable={!diaryForm.isCancle}
                                                 placeholder="팀2"
                                                 value={diaryForm.team2}
                                             />
@@ -902,29 +982,41 @@ const DiaryScreen = () => {
                                     {diary.title?.split("vs")[0]?.trim() || ""} vs{" "}
                                     {diary.title?.split("vs")[1]?.trim() || ""}
                                 </Text>
-                                <View
-                                    style={[
-                                        styles.diaryWinTag,
-                                        diary.isWin == "승"
-                                            ? { backgroundColor: "#d3f0ff", borderColor: "#5588d4" }
-                                            : diary.isWin == "패"
-                                            ? { backgroundColor: "#ffaeae", borderColor: "#ff5e5e" }
-                                            : { backgroundColor: "#dddddd" },
-                                    ]}
-                                >
-                                    <Text
-                                        style={{
-                                            color:
-                                                diary.isWin == "승"
-                                                    ? "#5588d4"
-                                                    : diary.isWin == "패"
-                                                    ? "#ff5e5e"
-                                                    : "#666666",
-                                        }}
+                                {diary.isCancle ? (
+                                    <View style={[styles.diaryWinTag, { backgroundColor: "#dddddd" }]}>
+                                        <Text
+                                            style={{
+                                                color: "#666666",
+                                            }}
+                                        >
+                                            취소
+                                        </Text>
+                                    </View>
+                                ) : (
+                                    <View
+                                        style={[
+                                            styles.diaryWinTag,
+                                            diary.isWin == "승"
+                                                ? { backgroundColor: "#d3f0ff", borderColor: "#5588d4" }
+                                                : diary.isWin == "패"
+                                                ? { backgroundColor: "#ffaeae", borderColor: "#ff5e5e" }
+                                                : { backgroundColor: "#dddddd" },
+                                        ]}
                                     >
-                                        {diary.isWin}
-                                    </Text>
-                                </View>
+                                        <Text
+                                            style={{
+                                                color:
+                                                    diary.isWin == "승"
+                                                        ? "#5588d4"
+                                                        : diary.isWin == "패"
+                                                        ? "#ff5e5e"
+                                                        : "#666666",
+                                            }}
+                                        >
+                                            {diary.isWin}
+                                        </Text>
+                                    </View>
+                                )}
                             </View>
                         </Pressable>
                     ))}
