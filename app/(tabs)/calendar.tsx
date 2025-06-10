@@ -187,9 +187,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     header: {
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: "#ccc",
+        padding: 10,
     },
     calendarContainer: {
         padding: 16,
@@ -204,9 +202,8 @@ const styles = StyleSheet.create({
         padding: 16,
         marginBottom: 12,
         borderRadius: 8,
-        borderWidth: 1,
+
         backgroundColor: "#fff",
-        borderColor: "#ccc",
     },
     modalOverlay: {
         flex: 1,

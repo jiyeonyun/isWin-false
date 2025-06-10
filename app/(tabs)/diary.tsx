@@ -41,7 +41,8 @@ const DiaryScreen = () => {
     const [parsed, setParsed] = useState<DiaryData>();
     const [isWin, setIsWin] = useState<string>("무");
     const [isLoading, setIsLoading] = useState<boolean>(false);
-    const [image, setImage] = useState<string | null>(null);
+    const [originWin, setOriginWin] = useState<string>("무");
+
     const [diaryForm, setDiaryForm] = useState<DiaryData>({
         title: "",
         desc: "",
@@ -231,6 +232,7 @@ const DiaryScreen = () => {
                 if (diaryDocSnap.exists()) {
                     const existingDiaryData = diaryDocSnap.data() as DiaryData;
                     setDiaryForm(existingDiaryData);
+                    setOriginWin(existingDiaryData.isWin);
                 } else {
                     setDiaryForm({
                         title: parsed.title || "",
@@ -251,6 +253,7 @@ const DiaryScreen = () => {
                         cost: parsed.cost || 0,
                         image: parsed.image || "",
                     });
+                    setOriginWin(parsed.isWin);
                 }
             }
         };
@@ -273,10 +276,6 @@ const DiaryScreen = () => {
     useEffect(() => {
         const team1Score = calculateTeamScore(0);
         const team2Score = calculateTeamScore(1);
-
-        console.log("Team1 Score:", team1Score);
-        console.log("Team2 Score:", team2Score);
-        console.log("Inning Scores:", diaryForm.inningScores);
 
         // 삼성팀이 team1인 경우
         if (diaryForm.team1.includes("삼성")) {
@@ -379,13 +378,26 @@ const DiaryScreen = () => {
             const countDoc = await getDoc(countRef);
 
             if (countDoc.exists()) {
-                // 기존 카운트 문서가 있는 경우
                 const currentCount = countDoc.data();
-                await setDoc(countRef, {
-                    win: (currentCount.win || 0) + (diaryForm.isWin === "승" ? 1 : 0),
-                    lose: (currentCount.lose || 0) + (diaryForm.isWin === "패" ? 1 : 0),
-                    draw: (currentCount.draw || 0) + (diaryForm.isWin === "무" ? 1 : 0),
-                });
+                // 이전 승패 상태 감소
+                if (originWin === "승") {
+                    currentCount.win = (currentCount.win || 0) - 1;
+                } else if (originWin === "패") {
+                    currentCount.lose = (currentCount.lose || 0) - 1;
+                } else if (originWin === "무") {
+                    currentCount.draw = (currentCount.draw || 0) - 1;
+                }
+
+                // 새로운 승패 상태 증가
+                if (diaryForm.isWin === "승") {
+                    currentCount.win = (currentCount.win || 0) + 1;
+                } else if (diaryForm.isWin === "패") {
+                    currentCount.lose = (currentCount.lose || 0) + 1;
+                } else if (diaryForm.isWin === "무") {
+                    currentCount.draw = (currentCount.draw || 0) + 1;
+                }
+
+                await setDoc(countRef, currentCount);
             } else {
                 // 새로운 카운트 문서 생성
                 await setDoc(countRef, {
@@ -429,6 +441,24 @@ const DiaryScreen = () => {
                             const diaryDocRef = doc(db, "users", user.uid, "diaries", diaryForm.date);
                             await deleteDoc(diaryDocRef);
 
+                            // count 컬렉션 업데이트
+                            const countRef = doc(db, "users", user.uid, "count", "stats");
+                            const countDoc = await getDoc(countRef);
+
+                            if (countDoc.exists()) {
+                                const currentCount = countDoc.data();
+                                // 삭제된 일기의 승패 상태 감소
+                                if (diaryForm.isWin === "승") {
+                                    currentCount.win = (currentCount.win || 0) - 1;
+                                } else if (diaryForm.isWin === "패") {
+                                    currentCount.lose = (currentCount.lose || 0) - 1;
+                                } else if (diaryForm.isWin === "무") {
+                                    currentCount.draw = (currentCount.draw || 0) - 1;
+                                }
+
+                                await setDoc(countRef, currentCount);
+                            }
+
                             Alert.alert("삭제 성공", "일기가 성공적으로 삭제되었습니다.");
                             setIsDiary(false);
                         } catch (error) {
@@ -469,6 +499,23 @@ const DiaryScreen = () => {
             fetchDiaries();
         }
     }, [isDiary, user?.uid]);
+
+    // 일기 항목 클릭 시 처리
+    const handleDiaryPress = (diary: DiaryData) => {
+        setParsed(diary);
+        setDiaryForm({
+            ...diary,
+            team1: diary.title?.split("vs")[0]?.trim() || "",
+            team2: diary.title?.split("vs")[1]?.trim() || "",
+            inningScores: diary.inningScores || {},
+            team1Lineup: diary.team1Lineup || Array(10).fill(""),
+            team2Lineup: diary.team2Lineup || Array(10).fill(""),
+            cost: diary.cost || 0,
+            image: diary.image || "",
+        });
+        setOriginWin(diary.isWin); // originWin 설정 추가
+        setIsDiary(true);
+    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -847,20 +894,7 @@ const DiaryScreen = () => {
                         <Pressable
                             key={diary.date}
                             style={styles.diaryListItem}
-                            onPress={() => {
-                                setParsed(diary);
-                                setDiaryForm({
-                                    ...diary,
-                                    team1: diary.title?.split("vs")[0]?.trim() || "",
-                                    team2: diary.title?.split("vs")[1]?.trim() || "",
-                                    inningScores: diary.inningScores || {},
-                                    team1Lineup: diary.team1Lineup || Array(10).fill(""),
-                                    team2Lineup: diary.team2Lineup || Array(10).fill(""),
-                                    cost: diary.cost || 0,
-                                    image: diary.image || "",
-                                });
-                                setIsDiary(true);
-                            }}
+                            onPress={() => handleDiaryPress(diary)}
                         >
                             <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
                                 <Text style={styles.diaryItemDate}>{diary.date}</Text>
@@ -868,6 +902,29 @@ const DiaryScreen = () => {
                                     {diary.title?.split("vs")[0]?.trim() || ""} vs{" "}
                                     {diary.title?.split("vs")[1]?.trim() || ""}
                                 </Text>
+                                <View
+                                    style={[
+                                        styles.diaryWinTag,
+                                        diary.isWin == "승"
+                                            ? { backgroundColor: "#d3f0ff", borderColor: "#5588d4" }
+                                            : diary.isWin == "패"
+                                            ? { backgroundColor: "#ffaeae", borderColor: "#ff5e5e" }
+                                            : { backgroundColor: "#dddddd" },
+                                    ]}
+                                >
+                                    <Text
+                                        style={{
+                                            color:
+                                                diary.isWin == "승"
+                                                    ? "#5588d4"
+                                                    : diary.isWin == "패"
+                                                    ? "#ff5e5e"
+                                                    : "#666666",
+                                        }}
+                                    >
+                                        {diary.isWin}
+                                    </Text>
+                                </View>
                             </View>
                         </Pressable>
                     ))}
@@ -1194,6 +1251,14 @@ const styles = StyleSheet.create({
         textAlign: "center",
         fontSize: 16,
         fontWeight: "normal",
+    },
+    diaryWinTag: {
+        borderWidth: 1,
+        flexDirection: "column",
+        alignContent: "center",
+        justifyContent: "center",
+        padding: 8,
+        borderRadius: 8,
     },
 });
 

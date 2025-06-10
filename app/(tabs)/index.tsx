@@ -1,13 +1,21 @@
 import SettingModal from "@/components/modal/SettingModal";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { firestore } from "@/firebaseConfig";
-import { useIsFocused } from "@react-navigation/native";
+import { useIsFocused, useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { getAuth } from "firebase/auth";
 import { collection, doc, getDoc, getDocs, getFirestore } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Dimensions, Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 import { BarChart, LineChart, PieChart } from "react-native-chart-kit";
+import { WebView } from "react-native-webview";
 import { DiaryData } from "./diary";
+
+type RootStackParamList = {
+    diary: { date: string };
+};
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function HomeScreen() {
     const [name, setName] = useState("");
@@ -17,6 +25,7 @@ export default function HomeScreen() {
     const [total, setTotal] = useState(0);
     const [win, setWin] = useState(0);
     const [lose, setLose] = useState(0);
+    const [draw, setDraw] = useState(0);
     const [winRate, setWinRate] = useState(0);
     const [sequnceResultNumber, setSequnceResultNumber] = useState(0);
     const [sequnceResult, setSequnceResult] = useState("win");
@@ -35,6 +44,10 @@ export default function HomeScreen() {
     const isFocused = useIsFocused();
     const auth = getAuth();
     const user = auth.currentUser;
+    const webViewRef = useRef<WebView>(null);
+    const [isWebViewLoading, setIsWebViewLoading] = useState(true);
+    const [webViewError, setWebViewError] = useState(false);
+    const navigation = useNavigation<NavigationProp>();
 
     useEffect(() => {
         const db = getFirestore();
@@ -88,6 +101,7 @@ export default function HomeScreen() {
                     const countData = countDoc.data();
                     setWin(countData.win || 0);
                     setLose(countData.lose || 0);
+                    setDraw(countData.draw || 0);
                     setTotal((countData.win || 0) + (countData.lose || 0) + (countData.draw || 0));
                     setWinRate(
                         countData.win
@@ -136,7 +150,6 @@ export default function HomeScreen() {
 
     const calculateWinRates = (diariesData: DiaryData[]) => {
         const monthlyStats = new Map<string, { win: number; total: number }>();
-        console.log(monthlyStats);
         const weeklyStats = new Map<string, { win: number; total: number }>();
         const dailyStats = new Map<string, { win: number; total: number }>();
 
@@ -300,25 +313,41 @@ export default function HomeScreen() {
             switch (selectedStat) {
                 case "winRate":
                     // 승률: 월간/주간은 라인, 일간은 파이
-                    return data.map((d) => d.winRate);
+                    return data.map((d) => {
+                        const rate = d.winRate;
+                        return isNaN(rate) || !isFinite(rate) ? 0 : rate;
+                    });
                 case "winCount":
                     // 승리: 일간/주간은 막대, 월간은 누적 막대
-                    return data.map((d) => d.winCount);
+                    return data.map((d) => {
+                        const count = d.winCount;
+                        return isNaN(count) || !isFinite(count) ? 0 : count;
+                    });
                 case "totalGames":
                     // 경기수: 일간은 막대, 주간/월간은 라인
-                    return data.map((d) => d.totalGames);
-                case "winLoss":
-                    // 승패추이: 스택 바 차트
-                    return {
-                        win: data.map((d) => d.winCount),
-                        lose: data.map((d) => d.totalGames - d.winCount),
-                    };
+                    return data.map((d) => {
+                        const total = d.totalGames;
+                        return isNaN(total) || !isFinite(total) ? 0 : total;
+                    });
+
                 default:
-                    return data.map((d) => d.winRate);
+                    return data.map((d) => {
+                        const rate = d.winRate;
+                        return isNaN(rate) || !isFinite(rate) ? 0 : rate;
+                    });
             }
         };
 
         const renderChart = () => {
+            // 데이터가 비어있는 경우 처리
+            if (!data || data.length === 0) {
+                return (
+                    <View style={[styles.chart, { justifyContent: "center", alignItems: "center" }]}>
+                        <Text>데이터가 없습니다</Text>
+                    </View>
+                );
+            }
+
             switch (selectedStat) {
                 case "winRate":
                     if (selectedPeriod === "day") {
@@ -482,57 +511,31 @@ export default function HomeScreen() {
                             />
                         );
                     }
-
-                case "winLoss":
-                    // 승패추이: 스택 바 차트
-                    const winLossData = getChartData() as { win: number[]; lose: number[] };
-                    return (
-                        <BarChart
-                            data={{
-                                labels: data.map((d) => d.date),
-                                datasets: [
-                                    {
-                                        data: winLossData.win,
-                                        color: (opacity = 1) => `rgba(69, 155, 248, ${opacity})`, // 승리
-                                    },
-                                    {
-                                        data: winLossData.lose,
-                                        color: (opacity = 1) => `rgba(200, 239, 247, ${opacity})`, // 패배
-                                    },
-                                ],
-                            }}
-                            width={Math.max(Dimensions.get("window").width - 40, data.length * 50)}
-                            height={220}
-                            yAxisLabel=""
-                            yAxisSuffix=""
-                            chartConfig={{
-                                backgroundColor: "#ffffff",
-                                backgroundGradientFrom: "#ffffff",
-                                backgroundGradientTo: "#ffffff",
-                                decimalPlaces: 0,
-                                color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                                labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                            }}
-                            style={styles.chart}
-                            yLabelsOffset={0}
-                        />
-                    );
             }
         };
 
         return (
             <View style={styles.graphContainer}>
-                <Text>지금까지 {name || "설정해주세요"} 님의 직관 승률은 </Text>
-                <Text>
-                    <Text style={{ fontWeight: "bold" }}>
-                        {total}전{win}승{lose}패
+                <View style={styles.chartTextContainer}>
+                    <Text>
+                        지금까지 <Text style={{ fontWeight: "bold" }}>{name || "설정해주세요"}</Text> 님의 직관 승률은{" "}
                     </Text>
-                    로 <Text style={{ fontWeight: "bold" }}>{winRate}%</Text> 입니다.
-                </Text>
-                <Text>
-                    현재 직관 <Text style={{ fontWeight: "bold" }}>{sequnceResultNumber}</Text>{" "}
-                    {sequnceResult == "win" ? "연승" : "연패"} 중입니다.
-                </Text>
+                    <Text>
+                        <Text style={{ fontWeight: "bold" }}>
+                            {total}전{win}승{lose}패{draw}무
+                        </Text>
+                        로 <Text style={{ fontWeight: "bold" }}>{winRate}%</Text> 입니다.
+                    </Text>
+                    <Text>
+                        현재 직관{" "}
+                        {sequnceResult == "win" ? (
+                            <Text style={{ fontWeight: "bold", color: "#0082d3dd" }}>{sequnceResultNumber}연승</Text>
+                        ) : (
+                            <Text style={{ fontWeight: "bold", color: "#a10000dd" }}>{sequnceResultNumber}연패</Text>
+                        )}{" "}
+                        중입니다.
+                    </Text>
+                </View>
 
                 {/* 통계 선택 버튼 */}
                 <View style={styles.statSelector}>
@@ -542,14 +545,7 @@ export default function HomeScreen() {
                     >
                         <Text style={selectedStat === "winRate" ? styles.selectedStatText : styles.statText}>승률</Text>
                     </Pressable>
-                    <Pressable
-                        style={[styles.statButton, selectedStat === "winLoss" && styles.selectedStat]}
-                        onPress={() => setSelectedStat("winLoss")}
-                    >
-                        <Text style={selectedStat === "winLoss" ? styles.selectedStatText : styles.statText}>
-                            승패 추이
-                        </Text>
-                    </Pressable>
+
                     <Pressable
                         style={[styles.statButton, selectedStat === "winCount" && styles.selectedStat]}
                         onPress={() => setSelectedStat("winCount")}
@@ -567,6 +563,7 @@ export default function HomeScreen() {
                         </Text>
                     </Pressable>
                 </View>
+                <View style={styles.chartContainer}>{renderChart()}</View>
 
                 {/* 기간 선택 버튼 */}
                 <View style={styles.periodSelector}>
@@ -586,17 +583,7 @@ export default function HomeScreen() {
                             주간
                         </Text>
                     </Pressable>
-                    <Pressable
-                        style={[styles.periodButton, selectedPeriod === "day" && styles.selectedPeriod]}
-                        onPress={() => setSelectedPeriod("day")}
-                    >
-                        <Text style={selectedPeriod === "day" ? styles.selectedPeriodText : styles.periodText}>
-                            일간
-                        </Text>
-                    </Pressable>
                 </View>
-
-                <View style={styles.chartContainer}>{renderChart()}</View>
             </View>
         );
     };
@@ -605,19 +592,119 @@ export default function HomeScreen() {
         return (
             <View style={styles.diaryContainer}>
                 {diaryContent.map((diary) => (
-                    <Text key={diary.date}>
-                        {diary.date} / {diary.title}
-                    </Text>
+                    <Pressable key={diary.date} style={styles.diaryItemContainer}>
+                        <View>
+                            <Text>{diary.date} </Text>
+                            <Text>{diary.title}</Text>
+                        </View>
+                        <View
+                            style={[
+                                styles.diaryWinTag,
+                                diary.isWin == "승"
+                                    ? { backgroundColor: "#d3f0ff", borderColor: "#5588d4" }
+                                    : diary.isWin == "패"
+                                    ? { backgroundColor: "#ffaeae", borderColor: "#ff5e5e" }
+                                    : { backgroundColor: "#dddddd" },
+                            ]}
+                        >
+                            <Text
+                                style={{
+                                    color:
+                                        diary.isWin == "승" ? "#5588d4" : diary.isWin == "패" ? "#ff5e5e" : "#666666",
+                                }}
+                            >
+                                {diary.isWin}
+                            </Text>
+                        </View>
+                    </Pressable>
                 ))}
+                <Pressable
+                    onPress={() => {
+                        navigation.navigate("diary", { date: "" });
+                    }}
+                    style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+                >
+                    <Text>+ 더 보기</Text>
+                </Pressable>
             </View>
         );
     };
 
+    const renderWebView = () => {
+        return (
+            <View style={styles.webviewContainer}>
+                {isWebViewLoading && (
+                    <View style={styles.loadingContainer}>
+                        <Text>순위를 불러오는 중...</Text>
+                    </View>
+                )}
+                {webViewError && (
+                    <View style={styles.errorContainer}>
+                        <Text style={styles.errorText}>순위를 불러오는데 실패했습니다.</Text>
+                        <Text style={styles.errorSubText}>새로고침해주세요.</Text>
+                    </View>
+                )}
+                <WebView
+                    style={[styles.webview, (isWebViewLoading || webViewError) && styles.hiddenWebView]}
+                    source={{ uri: "https://m.sports.naver.com/kbaseball/record/kbo?seasonCode=2025&tab=teamRank" }}
+                    startInLoadingState={true}
+                    javaScriptEnabled={true}
+                    domStorageEnabled={true}
+                    onLoadStart={() => {
+                        setIsWebViewLoading(true);
+                        setWebViewError(false);
+                    }}
+                    onLoadEnd={() => {
+                        console.log("WebView 로드 완료");
+                        webViewRef.current?.injectJavaScript(`
+                           setTimeout(() => {
+                             const tableGroup = document.querySelector('[class^="Table_inner"]');
+                             if (tableGroup) {
+                                 document.body.innerHTML = '';
+                                 document.body.appendChild(tableGroup.cloneNode(true));
+                                 document.body.style.backgroundColor = 'white';
+                                 document.body.style.margin = '0';
+                                 document.body.style.padding = '0';
+                                 
+                                 // TableHead_table_head로 시작하는 모든 요소 찾기
+                                 const tableHeads = document.querySelectorAll('[class^="TableHead_table_head"]');
+                                 tableHeads.forEach(head => {
+                                     head.style.position = 'static';
+                                 });
+                                 
+                                 window.ReactNativeWebView.postMessage("✅ tableGroup 복사 완료!");
+                             } else {
+                                 window.ReactNativeWebView.postMessage("⛔️ tableGroup 못 찾음");
+                             }
+                           }, 1000);
+                            true;
+                        `);
+                    }}
+                    onMessage={(event) => {
+                        console.log("💌 WebView 메시지:", event.nativeEvent.data);
+                        if (event.nativeEvent.data.includes("✅")) {
+                            setIsWebViewLoading(false);
+                        } else if (event.nativeEvent.data.includes("⛔️")) {
+                            setWebViewError(true);
+                        }
+                    }}
+                    onError={(syntheticEvent) => {
+                        const { nativeEvent } = syntheticEvent;
+                        console.log("WebView error: ", nativeEvent);
+                        setWebViewError(true);
+                    }}
+                    originWhitelist={["*"]}
+                    ref={webViewRef}
+                />
+            </View>
+        );
+    };
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView>
                 {renderInfo()}
                 {renderGraph()}
+                {renderWebView()}
                 {renderDiary()}
                 {isSetting && <SettingModal isSetting={isSetting} setIsSetting={setIsSetting} />}
             </ScrollView>
@@ -628,6 +715,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        backgroundColor: "#f1f1f1dd",
     },
     infoContainer: {
         flexDirection: "row",
@@ -674,6 +762,8 @@ const styles = StyleSheet.create({
         padding: 16,
         margin: 16,
         borderRadius: 16,
+        marginBottom: 60,
+        gap: 10,
     },
     periodSelector: {
         flexDirection: "row",
@@ -736,5 +826,73 @@ const styles = StyleSheet.create({
     },
     chartContainer: {
         marginTop: 20,
+    },
+    chartTextContainer: {
+        marginBottom: 20,
+    },
+    webviewContainer: {
+        height: 400,
+        margin: 16,
+        backgroundColor: "white",
+        borderRadius: 16,
+        overflow: "hidden",
+    },
+    webview: {
+        flex: 1,
+    },
+    loadingContainer: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "white",
+        zIndex: 1,
+    },
+    errorContainer: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "white",
+        zIndex: 1,
+        padding: 20,
+    },
+    errorText: {
+        fontSize: 16,
+        fontWeight: "bold",
+        color: "#FF3B30",
+        marginBottom: 8,
+    },
+    errorSubText: {
+        fontSize: 14,
+        color: "#666",
+    },
+    hiddenWebView: {
+        opacity: 0,
+    },
+    diaryItemContainer: {
+        display: "flex",
+        flexDirection: "row",
+        gap: 5,
+        justifyContent: "space-between",
+        borderWidth: 1,
+        borderRadius: 8,
+        padding: 10,
+        borderColor: "#dddd",
+        backgroundColor: "#f9f9f988",
+    },
+    diaryWinTag: {
+        borderWidth: 1,
+        flexDirection: "column",
+        alignContent: "center",
+        justifyContent: "center",
+        paddingHorizontal: 10,
+        borderRadius: 8,
     },
 });
