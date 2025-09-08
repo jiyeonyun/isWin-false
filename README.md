@@ -44,6 +44,6 @@
 
 ## 📱 실행 방법
 
-https://github.com/user-attachments/assets/aaf465f8-b6a2-4335-9909-ed7331b50793
+<img src="https://github.com/user-attachments/assets/aaf465f8-b6a2-4335-9909-ed7331b50793"/>
 
 
