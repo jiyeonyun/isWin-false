@@ -1,50 +1,48 @@
-# Welcome to your Expo app 👋
+# 🦁 직관로그
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+삼성 라이온즈 직관 다니다가 **7연패** 찍고 멘붕 와서 만든 앱.  
+"내가 직관만 가면 왜 지는 거야?" → 그래서 어플로로 확인해보자! ✨  
 
-## Get started
+---
 
-1. Install dependencies
+## 📖 뭐하는 앱?
 
-   ```bash
-   npm install
-   ```
+- **직관 일기**  
+  날짜, 구장, 상대팀, 점수, 사진, 감정까지 기록  
 
-2. Start the app
+- **승/패 통계**  
+  내가 직관 갔을 때 승률 자동 계산 
 
-   ```bash
-   npx expo start
-   ```
+- **구장별 기록**  
+  대구, 잠실, 인천… 어디서 몇 번 졌는지 모아보기  
 
-In the output, you'll find options to open the app in a
+---
+## 추가될 기능
+- **친구 태그**  
+  같이 간 사람 기록 → 나중에 추억 소환 가능  
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- **사진 보관함**  
+  따로 앨범 안 만들어도 여기서 다 모아보기  
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+- **각 구단별 버전도 지원예정**
+  현재는 삼성라이온즈 일정만 가능합니다 
 
-## Get a fresh project
+## 😂 왜 만들었냐?
 
-When you're ready, run:
+- 같이 직관가는 친구들이 도대체 우리 어디서 얼만큼 진거지? 궁금해해서 
 
-```bash
-npm run reset-project
-```
+---
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## 🛠️ 기술 스택
 
-## Learn more
+- React Native (Expo)  
+- TypeScript  
+- fireStore
+- expo-image-picker (사진 업로드)  
 
-To learn more about developing your project with Expo, look at the following resources:
+---
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## 📱 실행 방법
 
-## Join the community
 
-Join our community of developers creating universal apps.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
